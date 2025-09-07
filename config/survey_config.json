@@ -1,0 +1,18 @@
+{
+    "input_encoding": "auto",
+    "output_format": "xlsx",
+    "clean_column_names": true,
+    "remove_empty_rows": true,
+    "date_formats": ["%Y-%m-%d", "%m/%d/%Y", "%d/%m/%Y"],
+    "excel_formatting": {
+        "header_color": "#D7E4BC",
+        "auto_fit_columns": true,
+        "freeze_panes": true,
+        "add_filters": true
+    },
+    "data_cleaning": {
+        "strip_whitespace": true,
+        "standardize_missing_values": ["", "N/A", "n/a", "NULL", "null", "None"],
+        "convert_numeric_strings": true
+    }
+}
