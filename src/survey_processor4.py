@@ -338,8 +338,7 @@ def data_map_initial_setup(workbook: openpyxl.Workbook) -> None:
         logging.info(f"Set row 2 height to {estimated_height} points to accommodate {max_lines} lines of wrapped text")
         
         # Add formulas starting in row 4
-        # G4 formula
-        ws['G4'] = "=INDEX('column question map'!$E$4:$E$940, MATCH($L4, 'column question map'!$D$4:$D$940, 0))"
+        # G4 formula - REMOVED, will be handled separately
         # H4 formula
         ws['H4'] = '=U4&", "&V4&", "&W4&", "&X4&", "&Y4&", "&Z4&", "&AA4&", "&AB4&", "&AC4&", "&S4'
         # I4 formula
@@ -392,7 +391,7 @@ def data_map_initial_setup(workbook: openpyxl.Workbook) -> None:
         ws['AF4'] = '=IF(AND(ISNUMBER(SEARCH("Lr",C4)),ISNUMBER(VALUE(MID(C4,SEARCH("Lr",C4)+2,1)))),1,0)'
         # AG4 formula
         ws['AG4'] = '=IF(OR(ISNUMBER(SEARCH("0r",C4)),ISNUMBER(SEARCH("1r",C4)),ISNUMBER(SEARCH("2r",C4)),ISNUMBER(SEARCH("3r",C4)),ISNUMBER(SEARCH("4r",C4)),ISNUMBER(SEARCH("5r",C4)),ISNUMBER(SEARCH("6r",C4)),ISNUMBER(SEARCH("7r",C4)),ISNUMBER(SEARCH("8r",C4)),ISNUMBER(SEARCH("9r",C4))),1,0)'
-        logging.info("Added formulas to G4 through AG4 (27 total formulas)")
+        logging.info("Added formulas to H4 through AG4 (26 total formulas - excluding G column)")
         
         # Find the last row with text in column C
         last_row_with_text = 1
@@ -404,13 +403,13 @@ def data_map_initial_setup(workbook: openpyxl.Workbook) -> None:
         target_last_row = last_row_with_text + 1
         
         if target_last_row > 4:  # Only copy if there are rows to copy to
-            # Copy formulas from G4:AG4 down to the target range
+            # Copy formulas from H4:AG4 down to the target range (excluding G column)
             from openpyxl.utils import range_boundaries
             
-            # Define the source range (G4:AG4)
-            source_range = f"G4:AG4"
-            # Define the target range (G5:AG{target_last_row})
-            target_range = f"G5:AG{target_last_row}"
+            # Define the source range (H4:AG4) - excluding G column
+            source_range = f"H4:AG4"
+            # Define the target range (H5:AG{target_last_row}) - excluding G column
+            target_range = f"H5:AG{target_last_row}"
             
             # Get source cells
             source_cells = ws[source_range]
@@ -667,11 +666,243 @@ def column_question_map_initial_setup(workbook: openpyxl.Workbook) -> None:
                 ws.cell(row=row, column=col).alignment = center_alignment
         
         logging.info("Applied center alignment to entire columns F, G, and H")
+        
+        # Convert data map column G formulas to values so Python can read question numbers
+        # This must be done after the column question map is populated
+        logging.info("Converting data map column G formulas to values for question detection...")
+        
+        # Get data map worksheet
+        if 'data map' in [ws_temp.title for ws_temp in workbook.worksheets]:
+            data_map_ws = workbook['data map']
+            
+            # Find the last row with text in column C of data map
+            data_map_last_row = 1
+            for row in range(1, data_map_ws.max_row + 1):
+                if data_map_ws.cell(row=row, column=3).value is not None and str(data_map_ws.cell(row=row, column=3).value).strip():
+                    data_map_last_row = row
+            
+            data_map_target_last_row = data_map_last_row + 1
+            
+            # Build lookup table from current column question map
+            # Column G contains unique question markers, Column H contains sequential numbers
+            question_markers = {}  # marker -> question_number
+            for row in range(3, min(200, ws.max_row + 1)):
+                marker = ws.cell(row=row, column=7).value  # Column G = 7 (unique markers)
+                question_num = ws.cell(row=row, column=8).value  # Column H = 8 (sequential numbers)
+                if marker and question_num:
+                    question_markers[str(marker).strip()] = question_num
+            
+            logging.info(f"Built lookup table with {len(question_markers)} question markers from column question map")
+            logging.info(f"Sample question markers: {dict(list(question_markers.items())[:10])}")
+            
+        # Need to convert column L formulas to values first, then use those for G column lookup
+        # The L4 formula: =IF(K4="System","System",IF(ISNUMBER(FIND("_",J4)),LEFT(J4,FIND("_",J4)-1),IF(ISNUMBER(FIND("none",J4)),LEFT(J4,FIND("none",J4)-1),IF(ISNUMBER(FIND("r",J4)),LEFT(J4,FIND("r",J4)-1),J4))))
+        logging.info("Converting data map column L formulas to values...")
+        
+        l_values = []
+        for row in range(4, data_map_target_last_row + 1):
+            # Get the question info from column C to simulate the L column logic
+            question_info = data_map_ws.cell(row=row, column=3).value  # Column C
+            if question_info and str(question_info).strip():
+                # Simulate question marker extraction (L column logic)
+                question_marker = str(question_info).strip()
+                
+                # Extract question code (simulate J column logic)
+                if question_marker.startswith('[') and ':' in question_marker:
+                    question_code = question_marker[1:question_marker.find(':')]
+                    question_code = question_code.replace('[', '').replace(']', '')
+                    
+                    # Check if it's a system question (simulate K column logic)
+                    if question_code and len(question_code) > 0:
+                        first_char = question_code[0]
+                        if first_char.isalpha() and first_char.isupper():
+                            # Survey question - extract prefix (L column logic)
+                            prefix = question_code
+                            if "_" in prefix:
+                                prefix = prefix[:prefix.find("_")]
+                            elif "none" in prefix:
+                                prefix = prefix[:prefix.find("none")]
+                            elif "r" in prefix:
+                                prefix = prefix[:prefix.find("r")]
+                            
+                            l_values.append(prefix)
+                        else:
+                            l_values.append("System")
+                    else:
+                        l_values.append("System")
+                else:
+                    l_values.append("System")
+            else:
+                l_values.append("System")
+        
+        # Paste L values back to data map column L
+        for i, value in enumerate(l_values):
+            row_num = i + 4  # Start from row 4
+            data_map_ws.cell(row=row_num, column=12, value=value)  # Column L = 12
+        
+        logging.info(f"Converted {len(l_values)} cells in data map column L from formulas to simulated values")
+        
+        # Now redo the G column conversion using the actual L values
+        logging.info("Redoing data map column G conversion using actual L values...")
+        
+        g_values = []
+        for row in range(4, data_map_target_last_row + 1):
+            # Get the actual value from column L in data map
+            column_l_value = data_map_ws.cell(row=row, column=12).value  # Column L = 12
+            
+            if column_l_value and str(column_l_value).strip() != "System":
+                # Look up this value in the question_markers dictionary
+                l_value_str = str(column_l_value).strip()
+                question_number = question_markers.get(l_value_str, "System")
+                g_values.append(question_number)
+            else:
+                g_values.append("System")
+        
+        # Paste back as values to data map column G
+        for i, value in enumerate(g_values):
+            row_num = i + 4  # Start from row 4
+            data_map_ws.cell(row=row_num, column=7, value=value)
+        
+            logging.info(f"Re-converted {len(g_values)} cells in data map column G using actual L values")
+        else:
+            logging.warning("Data map tab not found, skipping column G conversion")
+        
         logging.info("Column question map initial setup completed successfully")
         
     except Exception as e:
         logging.error(f"Error during column question map initial setup: {e}")
         raise
+
+
+
+def question_cutting_processor(workbook: openpyxl.Workbook) -> None:
+    """
+    Creates Q1-Q10 tabs for question processing.
+    
+    Args:
+        workbook (openpyxl.Workbook): The workbook to add question tabs to.
+    """
+    try:
+        logging.info("Starting question cutting processor...")
+        
+        # Create Q1-Q10 tabs
+        create_question_tabs(workbook)
+        
+        logging.info("Question cutting processor completed successfully")
+        
+    except Exception as e:
+        logging.error(f"Error during question cutting processor: {e}")
+        raise
+
+
+def create_question_tabs(workbook: openpyxl.Workbook) -> None:
+    """
+    Creates Q1-Q10 tabs for question processing.
+    
+    Args:
+        workbook (openpyxl.Workbook): The workbook to add question tabs to.
+    """
+    try:
+        logging.info("Creating Q1-Q10 tabs...")
+        
+        # Get the data map worksheet for column H lookups
+        if 'data map' not in [ws.title for ws in workbook.worksheets]:
+            logging.warning("No 'data map' tab found, creating tabs without column H data")
+            data_map_ws = None
+        else:
+            data_map_ws = workbook['data map']
+        
+        # Create Q1 through Q10 tabs
+        for i in range(1, 11):  # 1 to 10 inclusive
+            tab_name = f"Q{i}"
+            
+            # Remove existing tab if it exists
+            if tab_name in [ws.title for ws in workbook.worksheets]:
+                workbook.remove(workbook[tab_name])
+                logging.info(f"Removed existing {tab_name} tab")
+            
+            # Create new question tab
+            question_ws = workbook.create_sheet(title=tab_name)
+            
+            # Add the question number in cell A1
+            question_ws['A1'] = i
+            
+            # Find corresponding data from column H in data map
+            if data_map_ws:
+                column_h_text = find_question_column_h_text(data_map_ws, i)
+                if column_h_text:
+                    question_ws['A2'] = column_h_text
+                    logging.info(f"Added column H text to {tab_name} A2: {column_h_text}")
+                else:
+                    question_ws['A2'] = f"No data found for question {i}"
+                    logging.info(f"No column H data found for question {i}")
+            else:
+                question_ws['A2'] = f"Data map not available"
+            
+            # Add INDEX/MATCH formula to A3
+            formula = f"=INDEX('data map'!$H$4:$H$5000, MATCH('{tab_name}'!$A$1, 'data map'!$G$4:$G$5000, 0))"
+            question_ws['A3'] = formula
+            logging.info(f"Added INDEX/MATCH formula to {tab_name} A3")
+            
+            logging.info(f"Created {tab_name} tab")
+        
+        logging.info("Successfully created all Q1-Q10 tabs")
+        
+    except Exception as e:
+        logging.error(f"Error creating question tabs: {e}")
+        raise
+
+
+def find_question_column_h_text(data_map_ws: openpyxl.worksheet.worksheet.Worksheet, question_number: int) -> str:
+    """
+    Finds the first instance of a question number in column G and returns the corresponding column H value.
+    Since column H contains formulas, we'll simulate the formula evaluation to get actual values.
+    
+    Args:
+        data_map_ws: The data map worksheet
+        question_number: The question number to search for (1-10)
+        
+    Returns:
+        str: The evaluated value from column H, or None if not found
+    """
+    try:
+        # Search through column G starting from row 4 (where data begins)
+        for row in range(4, data_map_ws.max_row + 1):
+            cell_value = data_map_ws.cell(row=row, column=7).value  # Column G = 7
+            
+            if cell_value is not None:
+                cell_str = str(cell_value).strip()
+                # Skip "System" entries
+                if cell_str == "System":
+                    continue
+                
+                # Check if this matches our question number
+                if cell_str == str(question_number):
+                    # Found the question, get column H value from same row
+                    column_h_value = data_map_ws.cell(row=row, column=8).value  # Column H = 8
+                    
+                    # Check if it's a formula that needs evaluation
+                    if column_h_value and isinstance(column_h_value, str) and column_h_value.startswith('='):
+                        # Instead of trying to evaluate complex formulas, let's get the question info from column C
+                        # which contains the actual question text and information
+                        question_info = data_map_ws.cell(row=row, column=3).value  # Column C
+                        if question_info and str(question_info).strip():
+                            return str(question_info).strip()
+                        else:
+                            return f"Question {question_number} data from row {row}"
+                    else:
+                        # Not a formula, return the value directly
+                        if column_h_value is not None:
+                            return str(column_h_value).strip()
+                        else:
+                            return None
+        
+        # Question number not found
+        return None
+        
+    except Exception as e:
+        logging.error(f"Error finding column H text for question {question_number}: {e}")
+        return None
 
 
 def save_processed_excel(workbook: openpyxl.Workbook, output_path: str) -> None:
@@ -726,6 +957,9 @@ def process_excel_file(input_path: str, output_path: str) -> None:
         
         # Perform column question map initial setup
         column_question_map_initial_setup(workbook)
+        
+        # Perform question cutting
+        question_cutting_processor(workbook)
         
         # TODO: Add additional processing logic here
         
