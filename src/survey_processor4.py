@@ -874,11 +874,22 @@ def cut_single_select_with_other(question_ws: openpyxl.worksheet.worksheet.Works
         question_ws.column_dimensions['B'].width = 3
         question_ws.sheet_view.showGridLines = False
         
-        # Set additional column widths
+        # Set column widths as specified
+        question_ws.column_dimensions['C'].width = 20
+        question_ws.column_dimensions['D'].width = 13
+        question_ws.column_dimensions['E'].width = 13
         question_ws.column_dimensions['F'].width = 3
+        question_ws.column_dimensions['G'].width = 13
         question_ws.column_dimensions['H'].width = 3
+        question_ws.column_dimensions['I'].width = 13
+        question_ws.column_dimensions['J'].width = 13
+        question_ws.column_dimensions['K'].width = 13
+        question_ws.column_dimensions['L'].width = 13
+        question_ws.column_dimensions['M'].width = 13
+        question_ws.column_dimensions['N'].width = 13
         question_ws.column_dimensions['O'].width = 3
         question_ws.column_dimensions['P'].width = 3
+        question_ws.column_dimensions['Q'].width = 13
         
         # Place lowercase x in cells B2 and P2
         question_ws['B2'] = 'x'
@@ -924,6 +935,50 @@ def cut_single_select_with_other(question_ws: openpyxl.worksheet.worksheet.Works
         question_ws['M4'] = 'Filter Column #3'
         question_ws['N4'] = 'Filter #3'
         
+        # Add thin bottom borders to header cells
+        thin_bottom_border = openpyxl.styles.Border(bottom=openpyxl.styles.Side(style='thin'))
+        header_cells = ['C4', 'D4', 'E4', 'G4', 'I4', 'J4', 'K4', 'L4', 'M4', 'N4', 'Q4']
+        for cell_ref in header_cells:
+            question_ws[cell_ref].border = thin_bottom_border
+        
+        # Extract and place response options
+        if workbook and 'data map' in [ws.title for ws in workbook.worksheets]:
+            data_map_ws = workbook['data map']
+            extract_response_options(data_map_ws, question_ws, question_number)
+            
+            # Find and place "Other Specify Child" question text in Q2
+            other_child_text = find_other_specify_child_text(data_map_ws, question_number)
+            if other_child_text:
+                question_ws['Q2'] = other_child_text
+                question_ws['Q2'].font = openpyxl.styles.Font(bold=True)
+                logging.info(f"Added Other Specify Child text to Q2: {other_child_text[:50]}...")
+                
+                # Extract bracketed text from Q2 and place in Q4
+                bracketed_text = extract_bracketed_text(other_child_text)
+                if bracketed_text:
+                    question_ws['Q4'] = bracketed_text
+                    logging.info(f"Added bracketed text to Q4: {bracketed_text}")
+                    
+                    # Add FILTER formula to Q6 with quote mark prefix to prevent calculation
+                    filter_formula = '\'=FILTER(OFFSET(\'raw data\'!$C$3:$C$502, 0, MATCH($Q$4, \'raw data\'!$C$2:$AJC$2, 0)-1), (OFFSET(\'raw data\'!$C$3:$C$502, 0, MATCH($Q$4, \'raw data\'!$C$2:$AJC$2, 0)-1)<>"") * (IF($J$6="<>", TRUE, OFFSET(\'raw data\'!$C$3:$C$502, 0, MATCH($I$6, \'raw data\'!$C$2:$AJC$2, 0)-1)=$J$6)) * (IF($L$6="<>", TRUE, OFFSET(\'raw data\'!$C$3:$C$502, 0, MATCH($K$6, \'raw data\'!$C$2:$AJC$2, 0)-1)=$L$6)) * (IF($N$6="<>", TRUE, OFFSET(\'raw data\'!$C$3:$C$502, 0, MATCH($M$6, \'raw data\'!$C$2:$AJC$2, 0)-1)=$N$6)))'
+                    question_ws['Q6'] = filter_formula
+                    logging.info(f"Added FILTER formula to Q6")
+                else:
+                    logging.warning(f"No bracketed text found in Q2: {other_child_text}")
+            else:
+                logging.warning(f"No Other Specify Child text found for question {question_number}")
+        
+        # Apply center alignment to specified columns
+        center_alignment = openpyxl.styles.Alignment(horizontal='center')
+        center_columns = ['D', 'E', 'G', 'I', 'J', 'K', 'L', 'M', 'N']
+        
+        for col_letter in center_columns:
+            for row in question_ws.iter_rows(min_col=openpyxl.utils.column_index_from_string(col_letter), 
+                                           max_col=openpyxl.utils.column_index_from_string(col_letter)):
+                for cell in row:
+                    cell.alignment = center_alignment
+        
+        logging.info(f"Applied center alignment to columns D:E, G, I:N")
         logging.info(f"Successfully set up single select with other for question {question_number}")
         
     except Exception as e:
@@ -1003,6 +1058,212 @@ def find_column_l_text_from_data_map(data_map_ws: openpyxl.worksheet.worksheet.W
         return None
 
 
+def extract_response_options(data_map_ws: openpyxl.worksheet.worksheet.Worksheet, question_ws: openpyxl.worksheet.worksheet.Worksheet, question_number: int) -> None:
+    """
+    Extracts response options from the data map and places them in the question worksheet.
+    
+    Args:
+        data_map_ws: The data map worksheet
+        question_ws: The question worksheet to populate
+        question_number: The question number to process
+    """
+    try:
+        logging.info(f"Extracting response options for question {question_number}")
+        
+        # Step 1: Find the section number from column N
+        section_number = find_section_number_from_data_map(data_map_ws, question_number)
+        if not section_number:
+            logging.warning(f"No section number found for question {question_number}")
+            return
+        
+        logging.info(f"Found section number for question {question_number}: {section_number}")
+        
+        # Step 2: Find all rows with "Select Option [section]" in column P
+        target_pattern = f"Select Option {section_number}"
+        response_rows = []
+        
+        for row in range(4, data_map_ws.max_row + 1):
+            column_p_value = data_map_ws.cell(row=row, column=16).value  # Column P = 16
+            if column_p_value and str(column_p_value).strip() == target_pattern:
+                response_rows.append(row)
+        
+        logging.info(f"Found {len(response_rows)} response option rows for '{target_pattern}'")
+        
+        if not response_rows:
+            logging.warning(f"No response options found for pattern '{target_pattern}'")
+            return
+        
+        # Step 3: Extract response numbers (column D) and text (column E)
+        current_row = 6  # Start placing at row 6
+        
+        for data_row in response_rows:
+            # Get response number from column D
+            response_number = data_map_ws.cell(row=data_row, column=4).value  # Column D = 4
+            # Get response text from column E  
+            response_text = data_map_ws.cell(row=data_row, column=5).value  # Column E = 5
+            
+            # Place in question worksheet
+            if response_number is not None:
+                question_ws.cell(row=current_row, column=7, value=response_number)  # Column G = 7
+            if response_text is not None:
+                question_ws.cell(row=current_row, column=3, value=response_text)  # Column C = 3
+            
+            logging.info(f"Added response option {current_row-5}: {response_number} - {response_text}")
+            current_row += 1
+        
+        # Step 4: Add "<>" terminator in the next row
+        question_ws.cell(row=current_row, column=7, value="<>")  # Column G
+        question_ws.cell(row=current_row, column=3, value="<>")  # Column C
+        
+        logging.info(f"Added terminator '<>' at row {current_row}")
+        
+        # Step 5: Add COUNTIFS formula to column D starting at row 6
+        formula = '=COUNTIFS(OFFSET(\'raw data\'!$C$3:$C$502, 0, MATCH($G$4, \'raw data\'!$C$2:$AJC$2, 0)-1), $G6, OFFSET(\'raw data\'!$C$3:$C$502, 0, MATCH($I6, \'raw data\'!$C$2:$AJC$2, 0)-1), $J6, OFFSET(\'raw data\'!$C$3:$C$502, 0, MATCH($K6, \'raw data\'!$C$2:$AJC$2, 0)-1), $L6, OFFSET(\'raw data\'!$C$3:$C$502, 0, MATCH($M6, \'raw data\'!$C$2:$AJC$2, 0)-1), $N6)'
+        
+        # Add formula to D6 and drag down to include the terminator row (current_row has "<>")
+        for formula_row in range(6, current_row + 1):  # Include the "<>" row
+            # Adjust the formula for the current row by replacing "6" with the current row number
+            adjusted_formula = formula.replace('$G6', f'$G{formula_row}').replace('$I6', f'$I{formula_row}').replace('$J6', f'$J{formula_row}').replace('$K6', f'$K{formula_row}').replace('$L6', f'$L{formula_row}').replace('$M6', f'$M{formula_row}').replace('$N6', f'$N{formula_row}')
+            question_ws.cell(row=formula_row, column=4, value=adjusted_formula)  # Column D = 4
+        
+        # Step 6: Add "record" and "<>" pattern to columns I:N starting at row 6
+        pattern_values = ["record", "<>", "record", "<>", "record", "<>"]  # I, J, K, L, M, N
+        
+        for row_num in range(6, current_row + 1):  # Include the "<>" row
+            for col_index, value in enumerate(pattern_values):
+                col_num = 9 + col_index  # Column I = 9, J = 10, K = 11, L = 12, M = 13, N = 14
+                question_ws.cell(row=row_num, column=col_num, value=value)
+        
+        # Step 7: Add percentage formula to column E starting at row 6
+        # The denominator is the absolute reference to the cell in column D next to the "<>" in column C
+        denominator_row = current_row  # This is the row with "<>" in column C
+        
+        for row_num in range(6, current_row + 1):  # Include the "<>" row
+            # Create percentage formula: relative numerator / absolute denominator
+            percentage_formula = f"=D{row_num}/$D${denominator_row}"
+            cell = question_ws.cell(row=row_num, column=5, value=percentage_formula)  # Column E = 5
+            # Format as percentage
+            cell.number_format = '0.0%'
+        
+        logging.info(f"Added COUNTIFS formula to column D from row 6 to {current_row}")
+        logging.info(f"Added record/<> pattern to columns I:N from row 6 to {current_row}")
+        logging.info(f"Added percentage formula to column E from row 6 to {current_row} with denominator $D${denominator_row}")
+        logging.info(f"Successfully extracted {len(response_rows)} response options for question {question_number}")
+        
+    except Exception as e:
+        logging.error(f"Error extracting response options for question {question_number}: {e}")
+        raise
+
+
+def find_section_number_from_data_map(data_map_ws: openpyxl.worksheet.worksheet.Worksheet, question_number: int) -> str:
+    """
+    Finds the section number from column N of the data map in the same row as the first instance
+    of the question number in column G.
+    
+    Args:
+        data_map_ws: The data map worksheet
+        question_number: The question number to search for (1-10)
+        
+    Returns:
+        str: The section number from column N, or None if not found
+    """
+    try:
+        # Search through column G starting from row 4 (where data begins)
+        for row in range(4, data_map_ws.max_row + 1):
+            cell_value = data_map_ws.cell(row=row, column=7).value  # Column G = 7
+            
+            if cell_value is not None:
+                cell_str = str(cell_value).strip()
+                
+                # Check if this matches our question number
+                if cell_str == str(question_number):
+                    # Found the question, get column N value from same row
+                    section_number = data_map_ws.cell(row=row, column=14).value  # Column N = 14
+                    if section_number:
+                        return str(section_number).strip()
+                    else:
+                        return None
+        
+        return None
+        
+    except Exception as e:
+        logging.error(f"Error finding section number for question {question_number}: {e}")
+        return None
+
+
+def find_other_specify_child_text(data_map_ws: openpyxl.worksheet.worksheet.Worksheet, question_number: int) -> str:
+    """
+    Finds the "Other Specify Child" question text from column C of the data map.
+    
+    Searches for the first row where:
+    - Column G matches the question number
+    - Column H contains "0, Open Text, 0, 0, 0, 0, 0, 0, 0, Other Specify Child"
+    
+    Args:
+        data_map_ws: The data map worksheet
+        question_number: The question number to search for (1-10)
+        
+    Returns:
+        str: The question text from column C, or None if not found
+    """
+    try:
+        target_h_pattern = "0, Open Text, 0, 0, , 0, 0, 0, 0, Other Specify Child"
+        
+        # Search through all rows starting from row 4 (where data begins)
+        for row in range(4, data_map_ws.max_row + 1):
+            # Check column G for question number match
+            column_g_value = data_map_ws.cell(row=row, column=7).value  # Column G = 7
+            # Check column H for the specific pattern
+            column_h_value = data_map_ws.cell(row=row, column=8).value  # Column H = 8
+            
+            if (column_g_value is not None and 
+                str(column_g_value).strip() == str(question_number) and
+                column_h_value is not None and 
+                str(column_h_value).strip() == target_h_pattern):
+                
+                # Found the matching row, get column C value (question text)
+                question_text = data_map_ws.cell(row=row, column=3).value  # Column C = 3
+                if question_text:
+                    logging.info(f"Found Other Specify Child text at row {row} for question {question_number}")
+                    return str(question_text).strip()
+                else:
+                    logging.warning(f"Found matching row {row} but column C is empty")
+                    return None
+        
+        logging.info(f"No Other Specify Child pattern found for question {question_number}")
+        return None
+        
+    except Exception as e:
+        logging.error(f"Error finding Other Specify Child text for question {question_number}: {e}")
+        return None
+
+
+def extract_bracketed_text(text: str) -> str:
+    """
+    Extracts the first bracketed text from a string.
+    
+    For example: "[S1r6oe]: In which region..." returns "S1r6oe"
+    
+    Args:
+        text: The text containing bracketed content
+        
+    Returns:
+        str: The text inside the first brackets, or None if no brackets found
+    """
+    try:
+        import re
+        # Find the first occurrence of text within square brackets
+        match = re.search(r'\[([^\]]+)\]', text)
+        if match:
+            return match.group(1)  # Return the content inside brackets
+        else:
+            return None
+            
+    except Exception as e:
+        logging.error(f"Error extracting bracketed text from '{text}': {e}")
+        return None
+
+
 def save_processed_excel(workbook: openpyxl.Workbook, output_path: str) -> None:
     """
     Saves the processed workbook to the specified output path.
@@ -1055,6 +1316,18 @@ def process_excel_file(input_path: str, output_path: str) -> None:
         
         # Perform column question map initial setup
         column_question_map_initial_setup(workbook)
+        
+        # Save intermediate workbook with formulas (for debugging)
+        base_path = Path(output_path)
+        # Extract version number from output filename to keep consistent naming
+        stem = base_path.stem
+        if 'v' in stem:
+            version_part = stem[stem.rfind('v'):]  # Gets 'v58' part
+            formula_output_path = base_path.parent / f"test_processed_pilot{version_part}_formulas{base_path.suffix}"
+        else:
+            formula_output_path = base_path.parent / f"{stem}_formulas{base_path.suffix}"
+        save_processed_excel(workbook, str(formula_output_path))
+        logging.info(f"Saved intermediate workbook with formulas: {formula_output_path}")
         
         # Save workbook before Excel calculation
         save_processed_excel(workbook, output_path)
