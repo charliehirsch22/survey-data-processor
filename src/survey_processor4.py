@@ -785,6 +785,9 @@ def create_question_tabs(workbook: openpyxl.Workbook) -> None:
                     if column_h_text == "0, 0, 0, Simple Select, , 0, 0, 0, 0, Other Specify Parent":
                         cut_single_select_with_other(question_ws, i, workbook)
                         logging.info(f"Applied single select with other setup to {tab_name}")
+                    elif column_h_text == "0, 0, 0, Simple Select, , 0, 0, 0, 0, 0":
+                        cut_single_select(question_ws, i, workbook)
+                        logging.info(f"Applied single select setup to {tab_name}")
                     
                 else:
                     question_ws['A2'] = f"No data found for question {i}"
@@ -983,6 +986,110 @@ def cut_single_select_with_other(question_ws: openpyxl.worksheet.worksheet.Works
         
     except Exception as e:
         logging.error(f"Error setting up single select with other for question {question_number}: {e}")
+        raise
+
+
+def cut_single_select(question_ws: openpyxl.worksheet.worksheet.Worksheet, question_number: int, workbook: openpyxl.Workbook = None) -> None:
+    """
+    Sets up a single select question worksheet with formatting, response options, and formulas.
+    Similar to cut_single_select_with_other but excludes columns O, P, Q functionality.
+    
+    Args:
+        question_ws: The worksheet to set up
+        question_number: The question number (1-10)
+        workbook: The parent workbook containing data map for response option extraction
+    """
+    try:
+        logging.info(f"Setting up single select for question {question_number}")
+        
+        # Apply basic formatting - ensure first 2 columns are blank with width 3 and remove gridlines
+        question_ws.column_dimensions['A'].width = 3
+        question_ws.column_dimensions['B'].width = 3
+        question_ws.sheet_view.showGridLines = False
+        
+        # Set column widths as specified (excluding O, P, Q)
+        question_ws.column_dimensions['C'].width = 20
+        question_ws.column_dimensions['D'].width = 13
+        question_ws.column_dimensions['E'].width = 13
+        question_ws.column_dimensions['F'].width = 3
+        question_ws.column_dimensions['G'].width = 13
+        question_ws.column_dimensions['H'].width = 3
+        question_ws.column_dimensions['I'].width = 13
+        question_ws.column_dimensions['J'].width = 13
+        question_ws.column_dimensions['K'].width = 13
+        question_ws.column_dimensions['L'].width = 13
+        question_ws.column_dimensions['M'].width = 13
+        question_ws.column_dimensions['N'].width = 13
+        
+        # Place lowercase x in cell B2 only (no P2 for single select)
+        question_ws['B2'] = 'x'
+        
+        # Find and place question text from data map column C
+        if workbook and 'data map' in [ws.title for ws in workbook.worksheets]:
+            data_map_ws = workbook['data map']
+            question_text = find_question_text_from_data_map(data_map_ws, question_number)
+            if question_text:
+                question_ws['C2'] = question_text
+                # Make C2 bold
+                question_ws['C2'].font = openpyxl.styles.Font(bold=True)
+                logging.info(f"Added question text to C2: {question_text[:50]}...")
+            else:
+                question_ws['C2'] = f"Question {question_number} text not found"
+                question_ws['C2'].font = openpyxl.styles.Font(bold=True)
+                logging.warning(f"Question text not found for question {question_number}")
+                
+            # Find and place column L text from data map in G4
+            column_l_text = find_column_l_text_from_data_map(data_map_ws, question_number)
+            if column_l_text:
+                question_ws['G4'] = column_l_text
+                logging.info(f"Added column L text to G4: {column_l_text}")
+            else:
+                question_ws['G4'] = f"Column L text not found for question {question_number}"
+                logging.warning(f"Column L text not found for question {question_number}")
+                
+        else:
+            question_ws['C2'] = f"Question {question_number} - data map not available"
+            question_ws['C2'].font = openpyxl.styles.Font(bold=True)
+            question_ws['G4'] = "Data map not available"
+            logging.warning("Data map not available for question text lookup")
+        
+        # Add headers to row 4 (excluding Q4)
+        question_ws['C4'] = 'Response Text'
+        question_ws['D4'] = 'N'
+        question_ws['E4'] = '%'
+        question_ws['I4'] = 'Filter Column #1'
+        question_ws['J4'] = 'Filter #1'
+        question_ws['K4'] = 'Filter Column #2'
+        question_ws['L4'] = 'Filter #2'
+        question_ws['M4'] = 'Filter Column #3'
+        question_ws['N4'] = 'Filter #3'
+        
+        # Add thin bottom borders to header cells (excluding Q4)
+        thin_bottom_border = openpyxl.styles.Border(bottom=openpyxl.styles.Side(style='thin'))
+        header_cells = ['C4', 'D4', 'E4', 'G4', 'I4', 'J4', 'K4', 'L4', 'M4', 'N4']
+        for cell_ref in header_cells:
+            question_ws[cell_ref].border = thin_bottom_border
+        
+        # Extract and place response options (no Other Specify Child functionality)
+        if workbook and 'data map' in [ws.title for ws in workbook.worksheets]:
+            data_map_ws = workbook['data map']
+            extract_response_options(data_map_ws, question_ws, question_number)
+        
+        # Apply center alignment to specified columns (excluding Q)
+        center_alignment = openpyxl.styles.Alignment(horizontal='center')
+        center_columns = ['D', 'E', 'G', 'I', 'J', 'K', 'L', 'M', 'N']
+        
+        for col_letter in center_columns:
+            for row in question_ws.iter_rows(min_col=openpyxl.utils.column_index_from_string(col_letter), 
+                                           max_col=openpyxl.utils.column_index_from_string(col_letter)):
+                for cell in row:
+                    cell.alignment = center_alignment
+        
+        logging.info(f"Applied center alignment to columns D:E, G, I:N")
+        logging.info(f"Successfully set up single select for question {question_number}")
+        
+    except Exception as e:
+        logging.error(f"Error setting up single select for question {question_number}: {e}")
         raise
 
 
