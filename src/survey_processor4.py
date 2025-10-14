@@ -879,17 +879,17 @@ def cut_single_select_with_other(question_ws: openpyxl.worksheet.worksheet.Works
         
         # Set column widths as specified
         question_ws.column_dimensions['C'].width = 20
-        question_ws.column_dimensions['D'].width = 13
-        question_ws.column_dimensions['E'].width = 13
+        question_ws.column_dimensions['D'].width = 16
+        question_ws.column_dimensions['E'].width = 16
         question_ws.column_dimensions['F'].width = 3
-        question_ws.column_dimensions['G'].width = 13
+        question_ws.column_dimensions['G'].width = 16
         question_ws.column_dimensions['H'].width = 3
-        question_ws.column_dimensions['I'].width = 13
-        question_ws.column_dimensions['J'].width = 13
-        question_ws.column_dimensions['K'].width = 13
-        question_ws.column_dimensions['L'].width = 13
-        question_ws.column_dimensions['M'].width = 13
-        question_ws.column_dimensions['N'].width = 13
+        question_ws.column_dimensions['I'].width = 16
+        question_ws.column_dimensions['J'].width = 16
+        question_ws.column_dimensions['K'].width = 16
+        question_ws.column_dimensions['L'].width = 16
+        question_ws.column_dimensions['M'].width = 16
+        question_ws.column_dimensions['N'].width = 16
         question_ws.column_dimensions['O'].width = 3
         question_ws.column_dimensions['P'].width = 3
         question_ws.column_dimensions['Q'].width = 13
@@ -974,16 +974,169 @@ def cut_single_select_with_other(question_ws: openpyxl.worksheet.worksheet.Works
         # Apply center alignment to specified columns
         center_alignment = openpyxl.styles.Alignment(horizontal='center')
         center_columns = ['D', 'E', 'G', 'I', 'J', 'K', 'L', 'M', 'N']
-        
+
         for col_letter in center_columns:
-            for row in question_ws.iter_rows(min_col=openpyxl.utils.column_index_from_string(col_letter), 
+            for row in question_ws.iter_rows(min_col=openpyxl.utils.column_index_from_string(col_letter),
                                            max_col=openpyxl.utils.column_index_from_string(col_letter)):
                 for cell in row:
                     cell.alignment = center_alignment
-        
+
         logging.info(f"Applied center alignment to columns D:E, G, I:N")
+
+        # Add additional analysis section
+        # Find the last row with text in column C (should contain "<>")
+        last_row_with_text = 6  # Start from row 6 where response options begin
+        for row in range(6, question_ws.max_row + 1):
+            cell_value = question_ws.cell(row=row, column=3).value  # Column C = 3
+            if cell_value is not None and str(cell_value).strip():
+                last_row_with_text = row
+
+        # Place lowercase "x" in column B, two rows below the last row with text
+        new_section_row = last_row_with_text + 2
+        question_ws.cell(row=new_section_row, column=2, value='x')  # Column B = 2
+        question_ws.cell(row=new_section_row, column=3, value='Cross Cut')  # Column C = 3
+
+        # Add bottom border to cells C through N in the new section row
+        thin_bottom_border = openpyxl.styles.Border(bottom=openpyxl.styles.Side(style='thin'))
+        for col in range(3, 15):  # Column C = 3, Column N = 14, so range(3, 15) covers C:N
+            question_ws.cell(row=new_section_row, column=col).border = thin_bottom_border
+
+        logging.info(f"Added 'x' marker in B{new_section_row} and 'Cross Cut' text in C{new_section_row} for additional analysis section")
+        logging.info(f"Applied bottom border to cells C{new_section_row}:N{new_section_row}")
+
+        # Add filter labels starting two rows below "Cross Cut"
+        filter_start_row = new_section_row + 2
+        question_ws.cell(row=filter_start_row, column=3, value='Filter Column #1')  # Column C = 3
+        question_ws.cell(row=filter_start_row + 1, column=3, value='Filter #1')
+        question_ws.cell(row=filter_start_row + 2, column=3, value='Filter Column #2')
+        question_ws.cell(row=filter_start_row + 3, column=3, value='Filter #2')
+        logging.info(f"Added filter labels in column C from row {filter_start_row} to {filter_start_row + 3}")
+
+        # Add filter values in column D
+        question_ws.cell(row=filter_start_row, column=4, value='record')  # Column D = 4
+        question_ws.cell(row=filter_start_row + 1, column=4, value='<>')
+        question_ws.cell(row=filter_start_row + 2, column=4, value='record')
+        question_ws.cell(row=filter_start_row + 3, column=4, value='<>')
+        logging.info(f"Added filter values (record/<>) in column D from row {filter_start_row} to {filter_start_row + 3}")
+
+        # Add formula 3 rows below "Filter #2" in column C
+        formula_row = filter_start_row + 3 + 3  # "Filter #2" is at filter_start_row + 3, then add 3 more rows
+        question_ws.cell(row=formula_row, column=3, value='=C6')  # Column C = 3
+        logging.info(f"Added formula '=C6' in C{formula_row}")
+
+        # Add OFFSET formula one row up and one column to the right (column D)
+        offset_formula_row = formula_row - 1
+        # Use flexible row references based on where "Filter Column #1" and "Filter #1" are located
+        filter_col_1_row = filter_start_row  # Row with "Filter Column #1"
+        filter_1_row = filter_start_row + 1  # Row with "Filter #1"
+        offset_formula = f"=OFFSET('data map'!$E$2, MATCH(D${filter_col_1_row}, 'data map'!$L$2:$L$3200, 0)+D${filter_1_row},0)"
+        question_ws.cell(row=offset_formula_row, column=4, value=offset_formula)  # Column D = 4
+        logging.info(f"Added OFFSET formula in D{offset_formula_row} with flexible row references (D${filter_col_1_row} and D${filter_1_row})")
+
+        # Add COUNTIFS formula in the cell below (same row as =C6)
+        # Use flexible row references based on where filter rows are located
+        filter_col_2_row = filter_start_row + 2  # Row with "Filter Column #2"
+        filter_2_row = filter_start_row + 3  # Row with "Filter #2"
+        countifs_formula = f"=COUNTIFS(OFFSET('raw data'!$C$3:$C$502, 0, MATCH($G$4, 'raw data'!$C$2:$AJC$2, 0)-1), $G6, OFFSET('raw data'!$C$3:$C$502, 0, MATCH(D${filter_col_1_row}, 'raw data'!$C$2:$AJC$2, 0)-1), D${filter_1_row}, OFFSET('raw data'!$C$3:$C$502, 0, MATCH(D${filter_col_2_row}, 'raw data'!$C$2:$AJC$2, 0)-1), D${filter_2_row})"
+        question_ws.cell(row=formula_row, column=4, value=countifs_formula)  # Column D = 4
+        logging.info(f"Added COUNTIFS formula in D{formula_row} with flexible row references")
+
+        # Count the number of response options (from row 6 to the row with "<>" in column C)
+        response_option_count = 0
+        for row in range(6, question_ws.max_row + 1):
+            cell_value = question_ws.cell(row=row, column=3).value  # Column C = 3
+            if cell_value is not None and str(cell_value).strip():
+                response_option_count += 1
+                # Stop counting after we hit "<>"
+                if str(cell_value).strip() == "<>":
+                    break
+
+        # Drag down the formula =C6 and COUNTIFS formula for the number of response options
+        if response_option_count > 0:
+            for i in range(response_option_count):
+                current_formula_row = formula_row + i
+                # Calculate the reference row (6 + i for C6, C7, C8, etc.)
+                reference_row = 6 + i
+                question_ws.cell(row=current_formula_row, column=3, value=f'=C{reference_row}')
+
+                # Drag down COUNTIFS formula in column D, adjusting $G6 reference
+                countifs_formula_dragged = f"=COUNTIFS(OFFSET('raw data'!$C$3:$C$502, 0, MATCH($G$4, 'raw data'!$C$2:$AJC$2, 0)-1), $G{reference_row}, OFFSET('raw data'!$C$3:$C$502, 0, MATCH(D$16, 'raw data'!$C$2:$AJC$2, 0)-1), D$17, OFFSET('raw data'!$C$3:$C$502, 0, MATCH(D$18, 'raw data'!$C$2:$AJC$2, 0)-1), D$19)"
+                question_ws.cell(row=current_formula_row, column=4, value=countifs_formula_dragged)
+
+            logging.info(f"Dragged down formulas from row {formula_row} to {formula_row + response_option_count - 1} ({response_option_count} rows)")
+            logging.info(f"Column C contains =C6 through =C{reference_row}, Column D contains COUNTIFS formulas")
+
+            # Drag column D over to columns E through N for the entire new section
+            # This includes Filter Column #1 through Filter #2 rows, OFFSET formula row, and all COUNTIFS formula rows
+            start_drag_row = filter_start_row  # Start from "Filter Column #1" row
+            end_drag_row = formula_row + response_option_count - 1  # End at the last response option row
+
+            for row_num in range(start_drag_row, end_drag_row + 1):
+                source_cell = question_ws.cell(row=row_num, column=4)  # Column D = 4
+                source_value = source_cell.value
+
+                # Copy from D to E through N (columns 5 through 14)
+                for col_num in range(5, 15):  # E=5 through N=14
+                    if source_value and isinstance(source_value, str) and source_value.startswith('='):
+                        # This is a formula - adjust column references
+                        import re
+                        adjusted_formula = source_value
+
+                        # Calculate column offset (E is +1 from D, F is +2, etc.)
+                        col_offset = col_num - 4  # D=4, so E=5 means offset of 1
+
+                        # Replace column references like D$16, D$17, D$18, D$19 with adjusted columns
+                        # But NOT absolute references like $G$4 (dollar before column)
+                        # Pattern matches: letter (NOT preceded by $) + $ + digits (e.g., D$16 but not $G$4)
+                        def adjust_col_ref(match):
+                            col_letter = match.group(1)
+                            dollar = match.group(2)
+                            row_ref = match.group(3)
+
+                            # Convert column letter to number, add offset, convert back
+                            from openpyxl.utils import column_index_from_string, get_column_letter
+                            col_num_orig = column_index_from_string(col_letter)
+                            new_col_num = col_num_orig + col_offset
+                            new_col_letter = get_column_letter(new_col_num)
+
+                            return f"{new_col_letter}{dollar}{row_ref}"
+
+                        # Pattern to match column references like D$16 but NOT $G$4
+                        # Negative lookbehind (?<!\$) ensures no $ before the column letter
+                        adjusted_formula = re.sub(r'(?<!\$)([A-Z]+)(\$)(\d+)', adjust_col_ref, adjusted_formula)
+
+                        question_ws.cell(row=row_num, column=col_num, value=adjusted_formula)
+                    else:
+                        # Not a formula, just copy the value
+                        question_ws.cell(row=row_num, column=col_num, value=source_value)
+
+            logging.info(f"Dragged column D (including filter values and formulas) over to columns E:N from row {start_drag_row} to {end_drag_row} with adjusted column references")
+
+        # Ensure column widths and alignment are set correctly at the end (after all operations)
+        question_ws.column_dimensions['D'].width = 16
+        question_ws.column_dimensions['E'].width = 16
+        question_ws.column_dimensions['F'].width = 16
+        question_ws.column_dimensions['G'].width = 16
+        question_ws.column_dimensions['H'].width = 16
+        question_ws.column_dimensions['I'].width = 16
+        question_ws.column_dimensions['J'].width = 16
+        question_ws.column_dimensions['K'].width = 16
+        question_ws.column_dimensions['L'].width = 16
+        question_ws.column_dimensions['M'].width = 16
+        question_ws.column_dimensions['N'].width = 16
+        logging.info(f"Set column widths D:N (including F and H) to 16")
+
+        # Apply center alignment to columns D:N for all rows
+        center_alignment_final = openpyxl.styles.Alignment(horizontal='center')
+        for col_letter in ['D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N']:
+            for row in question_ws.iter_rows(min_col=openpyxl.utils.column_index_from_string(col_letter),
+                                           max_col=openpyxl.utils.column_index_from_string(col_letter)):
+                for cell in row:
+                    cell.alignment = center_alignment_final
+        logging.info(f"Applied center alignment to columns D:N (including F and H)")
+
         logging.info(f"Successfully set up single select with other for question {question_number}")
-        
+
     except Exception as e:
         logging.error(f"Error setting up single select with other for question {question_number}: {e}")
         raise

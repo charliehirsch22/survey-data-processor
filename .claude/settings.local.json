@@ -11,7 +11,8 @@
       "Bash(gh repo create:*)",
       "Bash(gh auth:*)",
       "Bash(git stash:*)",
-      "Bash(git config:*)"
+      "Bash(git config:*)",
+      "Bash(dir:*)"
     ],
     "deny": [],
     "ask": []
