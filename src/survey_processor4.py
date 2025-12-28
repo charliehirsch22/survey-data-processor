@@ -1135,24 +1135,32 @@ def cut_single_select_with_other(question_ws: openpyxl.worksheet.worksheet.Works
         question_ws.cell(row=filter_start_row + 3, column=4, value='<>')
         logging.info(f"Added filter values (record/<>) in column D from row {filter_start_row} to {filter_start_row + 3}")
 
-        # Add formula 3 rows below "Filter #2" in column C
-        formula_row = filter_start_row + 3 + 3  # "Filter #2" is at filter_start_row + 3, then add 3 more rows
+        # Add formula 4 rows below "Filter #2" in column C (3 blank rows + 2 header rows)
+        formula_row = filter_start_row + 3 + 4  # "Filter #2" is at filter_start_row + 3, then add 4 more rows
         question_ws.cell(row=formula_row, column=3, value='=C6')  # Column C = 3
         logging.info(f"Added formula '=C6' in C{formula_row}")
 
-        # Add OFFSET formula one row up and one column to the right (column D)
-        offset_formula_row = formula_row - 1
-        # Use flexible row references based on where "Filter Column #1" and "Filter #1" are located
+        # Add OFFSET formulas for both header rows
+        first_header_row = formula_row - 2  # Two rows above formula_row
+        second_header_row = formula_row - 1  # One row above formula_row
+
+        # Use flexible row references based on where filter rows are located
         filter_col_1_row = filter_start_row  # Row with "Filter Column #1"
         filter_1_row = filter_start_row + 1  # Row with "Filter #1"
-        offset_formula = f"=OFFSET('data map'!$E$2, MATCH(D${filter_col_1_row}, 'data map'!$L$2:$L$3200, 0)+D${filter_1_row},0)"
-        question_ws.cell(row=offset_formula_row, column=4, value=offset_formula)  # Column D = 4
-        logging.info(f"Added OFFSET formula in D{offset_formula_row} with flexible row references (D${filter_col_1_row} and D${filter_1_row})")
-
-        # Add COUNTIFS formula in the cell below (same row as =C6)
-        # Use flexible row references based on where filter rows are located
         filter_col_2_row = filter_start_row + 2  # Row with "Filter Column #2"
         filter_2_row = filter_start_row + 3  # Row with "Filter #2"
+
+        # First header row - Filter #1
+        first_header_formula = f"=OFFSET('data map'!$E$2, MATCH(D${filter_col_1_row}, 'data map'!$L$2:$L$3200, 0)+D${filter_1_row},0)"
+        question_ws.cell(row=first_header_row, column=4, value=first_header_formula)  # Column D = 4
+        logging.info(f"Added first OFFSET formula in D{first_header_row} with flexible row references (D${filter_col_1_row} and D${filter_1_row})")
+
+        # Second header row - Filter #2
+        second_header_formula = f"=OFFSET('data map'!$E$2, MATCH(D${filter_col_2_row}, 'data map'!$L$2:$L$3200, 0)+D${filter_2_row},0)"
+        question_ws.cell(row=second_header_row, column=4, value=second_header_formula)  # Column D = 4
+        logging.info(f"Added second OFFSET formula in D{second_header_row} with flexible row references (D${filter_col_2_row} and D${filter_2_row})")
+
+        # Add COUNTIFS formula in the cell below (same row as =C6)
         countifs_formula = f"=COUNTIFS(OFFSET('raw data'!$C$3:$C$502, 0, MATCH($G$4, 'raw data'!$C$2:$AJC$2, 0)-1), $G6, OFFSET('raw data'!$C$3:$C$502, 0, MATCH(D${filter_col_1_row}, 'raw data'!$C$2:$AJC$2, 0)-1), D${filter_1_row}, OFFSET('raw data'!$C$3:$C$502, 0, MATCH(D${filter_col_2_row}, 'raw data'!$C$2:$AJC$2, 0)-1), D${filter_2_row})"
         question_ws.cell(row=formula_row, column=4, value=countifs_formula)  # Column D = 4
         logging.info(f"Added COUNTIFS formula in D{formula_row} with flexible row references")
@@ -1307,24 +1315,32 @@ def cut_single_select(question_ws: openpyxl.worksheet.worksheet.Worksheet, quest
         question_ws.cell(row=filter_start_row + 3, column=4, value='<>')
         logging.info(f"Added filter values (record/<>) in column D from row {filter_start_row} to {filter_start_row + 3}")
 
-        # Add formula 3 rows below "Filter #2" in column C
-        formula_row = filter_start_row + 3 + 3  # "Filter #2" is at filter_start_row + 3, then add 3 more rows
+        # Add formula 4 rows below "Filter #2" in column C (3 blank rows + 2 header rows)
+        formula_row = filter_start_row + 3 + 4  # "Filter #2" is at filter_start_row + 3, then add 4 more rows
         question_ws.cell(row=formula_row, column=3, value='=C6')  # Column C = 3
         logging.info(f"Added formula '=C6' in C{formula_row}")
 
-        # Add OFFSET formula one row up and one column to the right (column D)
-        offset_formula_row = formula_row - 1
-        # Use flexible row references based on where "Filter Column #1" and "Filter #1" are located
+        # Add OFFSET formulas for both header rows
+        first_header_row = formula_row - 2  # Two rows above formula_row
+        second_header_row = formula_row - 1  # One row above formula_row
+
+        # Use flexible row references based on where filter rows are located
         filter_col_1_row = filter_start_row  # Row with "Filter Column #1"
         filter_1_row = filter_start_row + 1  # Row with "Filter #1"
-        offset_formula = f"=OFFSET('data map'!$E$2, MATCH(D${filter_col_1_row}, 'data map'!$L$2:$L$3200, 0)+D${filter_1_row},0)"
-        question_ws.cell(row=offset_formula_row, column=4, value=offset_formula)  # Column D = 4
-        logging.info(f"Added OFFSET formula in D{offset_formula_row} with flexible row references (D${filter_col_1_row} and D${filter_1_row})")
-
-        # Add COUNTIFS formula in the cell below (same row as =C6)
-        # Use flexible row references based on where filter rows are located
         filter_col_2_row = filter_start_row + 2  # Row with "Filter Column #2"
         filter_2_row = filter_start_row + 3  # Row with "Filter #2"
+
+        # First header row - Filter #1
+        first_header_formula = f"=OFFSET('data map'!$E$2, MATCH(D${filter_col_1_row}, 'data map'!$L$2:$L$3200, 0)+D${filter_1_row},0)"
+        question_ws.cell(row=first_header_row, column=4, value=first_header_formula)  # Column D = 4
+        logging.info(f"Added first OFFSET formula in D{first_header_row} with flexible row references (D${filter_col_1_row} and D${filter_1_row})")
+
+        # Second header row - Filter #2
+        second_header_formula = f"=OFFSET('data map'!$E$2, MATCH(D${filter_col_2_row}, 'data map'!$L$2:$L$3200, 0)+D${filter_2_row},0)"
+        question_ws.cell(row=second_header_row, column=4, value=second_header_formula)  # Column D = 4
+        logging.info(f"Added second OFFSET formula in D{second_header_row} with flexible row references (D${filter_col_2_row} and D${filter_2_row})")
+
+        # Add COUNTIFS formula in the cell below (same row as =C6)
         countifs_formula = f"=COUNTIFS(OFFSET('raw data'!$C$3:$C$502, 0, MATCH($G$4, 'raw data'!$C$2:$AJC$2, 0)-1), $G6, OFFSET('raw data'!$C$3:$C$502, 0, MATCH(D${filter_col_1_row}, 'raw data'!$C$2:$AJC$2, 0)-1), D${filter_1_row}, OFFSET('raw data'!$C$3:$C$502, 0, MATCH(D${filter_col_2_row}, 'raw data'!$C$2:$AJC$2, 0)-1), D${filter_2_row})"
         question_ws.cell(row=formula_row, column=4, value=countifs_formula)  # Column D = 4
         logging.info(f"Added COUNTIFS formula in D{formula_row} with flexible row references")
