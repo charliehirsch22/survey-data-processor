@@ -2,17 +2,256 @@
 """
 Survey Data Processor v4
 
-Improved version of the survey processor with enhanced Excel file loading and output functionality.
+Main processing pipeline:
+1. load_raw_excel_file() - Load workbook
+2. initial_set_up() - Rename tabs
+3. raw_data_initial_setup() - Format raw data tab
+4. data_map_initial_setup() - Format data map tab
+5. column_question_map_initial_setup() - Format column question map
+6. calculate_excel_formulas() - Calculate formulas via COM
+7. question_cutting_processor() - Create Q1-Q10 tabs
+8. save_processed_excel() - Save output
+
+Question Types:
+- Single Select with Other: cut_single_select_with_other()
+- Single Select: cut_single_select()
 """
 
-import pandas as pd
-import numpy as np
-from pathlib import Path
+# Standard library imports
+import argparse
 import logging
+import os
+import re
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+
+# Third-party imports
+import numpy as np
+import pandas as pd
 import openpyxl
-from openpyxl.utils import get_column_letter
-from openpyxl.styles import Border, Side, PatternFill, Alignment
+from openpyxl.styles import Border, Side, PatternFill, Alignment, Font
+from openpyxl.utils import get_column_letter, column_index_from_string, range_boundaries
+
+# Optional Windows-specific import
+try:
+    import win32com.client
+    WIN32_AVAILABLE = True
+except ImportError:
+    WIN32_AVAILABLE = False
+
+
+# ============================================================================
+# CONSTANTS
+# ============================================================================
+
+# Sheet names
+SHEET_RAW_DATA = 'raw data'
+SHEET_DATA_MAP = 'data map'
+SHEET_COLUMN_QUESTION_MAP = 'column question map'
+SHEET_LOOP_VARIABLES = 'loop variables'
+
+# Column widths
+COL_WIDTH_NARROW = 3
+COL_WIDTH_STANDARD = 13
+COL_WIDTH_MEDIUM = 16
+COL_WIDTH_WIDE = 20
+COL_WIDTH_EXTRA_WIDE = 50
+
+# Colors
+COLOR_PALE_BLUE = 'E6F3FF'
+
+# Column width configurations for different question types
+SINGLE_SELECT_WITH_OTHER_WIDTHS = {
+    'A': 3, 'B': 3, 'C': 20, 'D': 16, 'E': 16,
+    'F': 3, 'G': 16, 'H': 3, 'I': 16, 'J': 16,
+    'K': 16, 'L': 16, 'M': 16, 'N': 16, 'O': 3,
+    'P': 3, 'Q': 13
+}
+
+SINGLE_SELECT_WIDTHS = {
+    'A': 3, 'B': 3, 'C': 20, 'D': 13, 'E': 13,
+    'F': 3, 'G': 13, 'H': 3, 'I': 13, 'J': 13,
+    'K': 13, 'L': 13, 'M': 13, 'N': 13
+}
+
+
+# ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
+
+def apply_column_widths(worksheet: openpyxl.worksheet.worksheet.Worksheet, width_config: Dict[str, int]) -> None:
+    """
+    Apply column widths to a worksheet based on a configuration dictionary.
+
+    Args:
+        worksheet: The worksheet to apply widths to
+        width_config: Dictionary mapping column letters to width values
+    """
+    for col, width in width_config.items():
+        worksheet.column_dimensions[col].width = width
+
+
+def create_pale_blue_fill() -> PatternFill:
+    """Create and return a pale blue fill pattern."""
+    return PatternFill(
+        start_color=COLOR_PALE_BLUE,
+        end_color=COLOR_PALE_BLUE,
+        fill_type='solid'
+    )
+
+
+def create_thin_border() -> Border:
+    """Create and return a thin border on all sides."""
+    return Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+
+
+def create_thin_bottom_border() -> Border:
+    """Create and return a thin border on bottom only."""
+    return Border(bottom=Side(style='thin'))
+
+
+def setup_question_basic_formatting(question_ws: openpyxl.worksheet.worksheet.Worksheet, include_other: bool = False) -> None:
+    """
+    Apply basic formatting to a question worksheet: gridlines off, first 2 columns width 3.
+
+    Args:
+        question_ws: The worksheet to format
+        include_other: Whether to include columns O, P, Q for "other specify" functionality
+    """
+    question_ws.sheet_view.showGridLines = False
+    question_ws.column_dimensions['A'].width = COL_WIDTH_NARROW
+    question_ws.column_dimensions['B'].width = COL_WIDTH_NARROW
+
+    # Apply column widths based on question type
+    if include_other:
+        apply_column_widths(question_ws, SINGLE_SELECT_WITH_OTHER_WIDTHS)
+    else:
+        apply_column_widths(question_ws, SINGLE_SELECT_WIDTHS)
+
+
+def add_question_text_and_section_header(question_ws: openpyxl.worksheet.worksheet.Worksheet, question_number: int, workbook: openpyxl.Workbook = None) -> None:
+    """
+    Add question text to C2 and section number to G4 from data map.
+
+    Args:
+        question_ws: The worksheet to add text to
+        question_number: The question number (1-10)
+        workbook: The workbook containing the data map tab (optional)
+    """
+    if workbook and SHEET_DATA_MAP in [ws.title for ws in workbook.worksheets]:
+        data_map_ws = workbook[SHEET_DATA_MAP]
+        question_text = find_question_text_from_data_map(data_map_ws, question_number)
+        if question_text:
+            question_ws['C2'] = question_text
+            question_ws['C2'].font = Font(bold=True)
+            logging.info(f"Added question text to C2: {question_text[:50]}...")
+        else:
+            question_ws['C2'] = f"Question {question_number} text not found"
+            question_ws['C2'].font = Font(bold=True)
+            logging.warning(f"Question text not found for question {question_number}")
+
+        # Find and place column L text from data map in G4
+        column_l_text = find_column_l_text_from_data_map(data_map_ws, question_number)
+        if column_l_text:
+            question_ws['G4'] = column_l_text
+            logging.info(f"Added column L text to G4: {column_l_text}")
+        else:
+            question_ws['G4'] = f"Column L text not found for question {question_number}"
+            logging.warning(f"Column L text not found for question {question_number}")
+    else:
+        question_ws['C2'] = f"Question {question_number} - data map not available"
+        question_ws['C2'].font = Font(bold=True)
+        question_ws['G4'] = "Data map not available"
+        logging.warning("Data map not available for question text lookup")
+
+
+def add_row4_headers(question_ws: openpyxl.worksheet.worksheet.Worksheet, include_q_header: bool = False) -> None:
+    """
+    Add standard headers to row 4 of a question worksheet.
+
+    Args:
+        question_ws: The worksheet to add headers to
+        include_q_header: Whether to include Q4 header for "other specify" functionality
+    """
+    question_ws['C4'] = 'Response Text'
+    question_ws['D4'] = 'N'
+    question_ws['E4'] = '%'
+    question_ws['I4'] = 'Filter Column #1'
+    question_ws['J4'] = 'Filter #1'
+    question_ws['K4'] = 'Filter Column #2'
+    question_ws['L4'] = 'Filter #2'
+    question_ws['M4'] = 'Filter Column #3'
+    question_ws['N4'] = 'Filter #3'
+
+    # Add thin bottom borders to header cells
+    thin_bottom_border = create_thin_bottom_border()
+    header_cells = ['C4', 'D4', 'E4', 'G4', 'I4', 'J4', 'K4', 'L4', 'M4', 'N4']
+    if include_q_header:
+        header_cells.append('Q4')
+
+    for cell_ref in header_cells:
+        question_ws[cell_ref].border = thin_bottom_border
+
+
+def apply_center_alignment_to_columns(question_ws: openpyxl.worksheet.worksheet.Worksheet, include_q_column: bool = False) -> None:
+    """
+    Apply center alignment to standard columns in a question worksheet.
+
+    Args:
+        question_ws: The worksheet to apply alignment to
+        include_q_column: Whether to include column Q for "other specify" functionality
+    """
+    center_alignment = Alignment(horizontal='center')
+    center_columns = ['D', 'E', 'G', 'I', 'J', 'K', 'L', 'M', 'N']
+
+    for col_letter in center_columns:
+        for row in question_ws.iter_rows(min_col=column_index_from_string(col_letter),
+                                       max_col=column_index_from_string(col_letter)):
+            for cell in row:
+                cell.alignment = center_alignment
+
+    columns_str = "D:E, G, I:N"
+    if include_q_column:
+        columns_str = "D:E, G, I:Q"
+    logging.info(f"Applied center alignment to columns {columns_str}")
+
+
+def add_cross_cut_section(question_ws: openpyxl.worksheet.worksheet.Worksheet) -> int:
+    """
+    Add the "Cross Cut" section below the response options.
+
+    Args:
+        question_ws: The worksheet to add the section to
+
+    Returns:
+        int: The row number where the Cross Cut section was added
+    """
+    # Find the last row with text in column C (should contain "<>")
+    last_row_with_text = 6  # Start from row 6 where response options begin
+    for row in range(6, question_ws.max_row + 1):
+        cell_value = question_ws.cell(row=row, column=3).value  # Column C = 3
+        if cell_value is not None and str(cell_value).strip():
+            last_row_with_text = row
+
+    # Place lowercase "x" in column B, two rows below the last row with text
+    new_section_row = last_row_with_text + 2
+    question_ws.cell(row=new_section_row, column=2, value='x')  # Column B = 2
+    question_ws.cell(row=new_section_row, column=3, value='Cross Cut')  # Column C = 3
+
+    # Add bottom border to cells C through N in the new section row
+    thin_bottom_border = create_thin_bottom_border()
+    for col in range(3, 15):  # Column C = 3, Column N = 14, so range(3, 15) covers C:N
+        question_ws.cell(row=new_section_row, column=col).border = thin_bottom_border
+
+    logging.info(f"Added 'x' marker in B{new_section_row} and 'Cross Cut' text in C{new_section_row} for additional analysis section")
+    logging.info(f"Applied bottom border to cells C{new_section_row}:N{new_section_row}")
+
+    return new_section_row
 
 
 def load_raw_excel_file(file_path: str) -> openpyxl.Workbook:
@@ -50,47 +289,47 @@ def initial_set_up(workbook: openpyxl.Workbook) -> None:
     - Renames tabs "A", "B", or "raw data" to "raw data"
     - Renames tabs like "datamap" to "data map"
     - Adds blank tabs "column question map" and "loop variables"
-    
+
     Args:
         workbook (openpyxl.Workbook): The workbook to set up.
     """
     try:
         logging.info("Starting initial setup...")
-        
+
         # Get all worksheet names
         sheet_names = workbook.sheetnames
         logging.info(f"Found sheets: {sheet_names}")
-        
+
         # Step 1: Rename tabs A, B, A1, or "raw data" to "raw data"
         for sheet_name in sheet_names:
             sheet_lower = sheet_name.lower()
-            if (sheet_lower in ['a', 'b', 'raw data'] or 
+            if (sheet_lower in ['a', 'b', SHEET_RAW_DATA] or
                 sheet_lower.startswith('a') and len(sheet_lower) <= 3):
-                if sheet_lower != 'raw data':
-                    workbook[sheet_name].title = 'raw data'
-                    logging.info(f"Renamed '{sheet_name}' to 'raw data'")
+                if sheet_lower != SHEET_RAW_DATA:
+                    workbook[sheet_name].title = SHEET_RAW_DATA
+                    logging.info(f"Renamed '{sheet_name}' to '{SHEET_RAW_DATA}'")
                 break
-        
+
         # Step 2: Rename datamap-like tabs to "data map"
         for sheet_name in workbook.sheetnames:
             if 'datamap' in sheet_name.lower():
-                workbook[sheet_name].title = 'data map'
-                logging.info(f"Renamed '{sheet_name}' to 'data map'")
+                workbook[sheet_name].title = SHEET_DATA_MAP
+                logging.info(f"Renamed '{sheet_name}' to '{SHEET_DATA_MAP}'")
                 break
-        
+
         # Step 3: Add new blank tabs if they don't exist
-        required_tabs = ['column question map', 'loop variables']
+        required_tabs = [SHEET_COLUMN_QUESTION_MAP, SHEET_LOOP_VARIABLES]
         existing_tabs = [ws.title.lower() for ws in workbook.worksheets]
-        
+
         for tab_name in required_tabs:
             if tab_name.lower() not in existing_tabs:
                 new_sheet = workbook.create_sheet(title=tab_name)
                 logging.info(f"Created new tab: '{tab_name}'")
             else:
                 logging.info(f"Tab '{tab_name}' already exists")
-        
+
         logging.info("Initial setup completed successfully")
-        
+
     except Exception as e:
         logging.error(f"Error during initial setup: {e}")
         raise
@@ -108,70 +347,57 @@ def raw_data_initial_setup(workbook: openpyxl.Workbook) -> None:
     """
     try:
         logging.info("Starting raw data initial setup...")
-        
+
         # Get the raw data worksheet
-        if 'raw data' not in [ws.title for ws in workbook.worksheets]:
-            logging.warning("No 'raw data' tab found, skipping raw data setup")
+        if SHEET_RAW_DATA not in [ws.title for ws in workbook.worksheets]:
+            logging.warning(f"No '{SHEET_RAW_DATA}' tab found, skipping raw data setup")
             return
-            
-        ws = workbook['raw data']
-        
+
+        ws = workbook[SHEET_RAW_DATA]
+
         # Insert 2 columns at the front
         ws.insert_cols(1, 2)
         logging.info("Inserted 2 columns at the front")
-        
+
         # Set width of the first 2 columns to 3
-        ws.column_dimensions['A'].width = 3
-        ws.column_dimensions['B'].width = 3
-        logging.info("Set width of first 2 columns to 3")
-        
+        ws.column_dimensions['A'].width = COL_WIDTH_NARROW
+        ws.column_dimensions['B'].width = COL_WIDTH_NARROW
+        logging.info(f"Set width of first 2 columns to {COL_WIDTH_NARROW}")
+
         # Insert 1 row at the top
         ws.insert_rows(1, 1)
         logging.info("Inserted 1 row at the top")
-        
+
         # Remove gridlines from the worksheet
         ws.sheet_view.showGridLines = False
         logging.info("Removed gridlines from worksheet")
-        
+
         # Format column headers in row 2
         # Find the actual header row (should be row 2 after inserting 1 row)
         # But let's check both row 1 and 2 to be safe
         header_row = 2
-        
+
         # Check if row 2 has headers, if not try row 1
         has_headers_row2 = any(ws.cell(row=2, column=col).value is not None for col in range(3, ws.max_column + 1))
         if not has_headers_row2:
             has_headers_row1 = any(ws.cell(row=1, column=col).value is not None for col in range(3, ws.max_column + 1))
             if has_headers_row1:
                 header_row = 1
-        
+
         logging.info(f"Using row {header_row} as header row")
-        
+
         # Find the last column with data in the header row
         last_col = ws.max_column
         for col in range(3, ws.max_column + 1):  # Start from column 3 (C) since we inserted 2 columns
             if ws.cell(row=header_row, column=col).value is None:
                 last_col = col - 1
                 break
-        
-        # Create border style (outline on all sides)
-        thin_border = Border(
-            left=Side(style='thin'),
-            right=Side(style='thin'),
-            top=Side(style='thin'),
-            bottom=Side(style='thin')
-        )
-        
-        # Create pale blue fill
-        pale_blue_fill = PatternFill(
-            start_color='E6F3FF',  # Pale blue color (lighter than ADD8E6)
-            end_color='E6F3FF',
-            fill_type='solid'
-        )
-        
-        # Create center alignment
+
+        # Create formatting styles
+        thin_border = create_thin_border()
+        pale_blue_fill = create_pale_blue_fill()
         center_alignment = Alignment(horizontal='center', vertical='center')
-        
+
         # Apply formatting to all header cells in the header row
         headers_formatted = 0
         for col in range(3, last_col + 1):  # Start from column 3 (C) since we inserted 2 columns
@@ -181,10 +407,10 @@ def raw_data_initial_setup(workbook: openpyxl.Workbook) -> None:
                 cell.fill = pale_blue_fill
                 cell.alignment = center_alignment
                 headers_formatted += 1
-        
+
         logging.info(f"Formatted {headers_formatted} column headers with borders, pale blue background, and center alignment")
         logging.info("Raw data initial setup completed successfully")
-        
+
     except Exception as e:
         logging.error(f"Error during raw data initial setup: {e}")
         raise
@@ -204,44 +430,44 @@ def data_map_initial_setup(workbook: openpyxl.Workbook) -> None:
     """
     try:
         logging.info("Starting data map initial setup...")
-        
+
         # Get the data map worksheet
-        if 'data map' not in [ws.title for ws in workbook.worksheets]:
-            logging.warning("No 'data map' tab found, skipping data map setup")
+        if SHEET_DATA_MAP not in [ws.title for ws in workbook.worksheets]:
+            logging.warning(f"No '{SHEET_DATA_MAP}' tab found, skipping data map setup")
             return
-            
-        ws = workbook['data map']
-        
+
+        ws = workbook[SHEET_DATA_MAP]
+
         # Remove gridlines from the worksheet
         ws.sheet_view.showGridLines = False
         logging.info("Removed gridlines from data map worksheet")
-        
+
         # Insert 2 columns at the front
         ws.insert_cols(1, 2)
         logging.info("Inserted 2 columns at the front")
-        
+
         # Set width of the first 2 columns to 3
-        ws.column_dimensions['A'].width = 3
-        ws.column_dimensions['B'].width = 3
-        logging.info("Set width of first 2 columns to 3")
-        
+        ws.column_dimensions['A'].width = COL_WIDTH_NARROW
+        ws.column_dimensions['B'].width = COL_WIDTH_NARROW
+        logging.info(f"Set width of first 2 columns to {COL_WIDTH_NARROW}")
+
         # Set width of column F to 3
-        ws.column_dimensions['F'].width = 3
-        logging.info("Set width of column F to 3")
-        
+        ws.column_dimensions['F'].width = COL_WIDTH_NARROW
+        logging.info(f"Set width of column F to {COL_WIDTH_NARROW}")
+
         # Set column widths for data map layout
-        ws.column_dimensions['C'].width = 50
-        logging.info("Set width of column C to 50")
-        
+        ws.column_dimensions['C'].width = COL_WIDTH_EXTRA_WIDE
+        logging.info(f"Set width of column C to {COL_WIDTH_EXTRA_WIDE}")
+
         # Set width of columns D and E to 13
-        ws.column_dimensions['D'].width = 13
-        ws.column_dimensions['E'].width = 13
-        logging.info("Set width of columns D:E to 13")
-        
+        ws.column_dimensions['D'].width = COL_WIDTH_STANDARD
+        ws.column_dimensions['E'].width = COL_WIDTH_STANDARD
+        logging.info(f"Set width of columns D:E to {COL_WIDTH_STANDARD}")
+
         # Set width of columns G through Z to 13
         for col_letter in ['G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z']:
-            ws.column_dimensions[col_letter].width = 13
-        logging.info("Set width of columns G:Z to 13")
+            ws.column_dimensions[col_letter].width = COL_WIDTH_STANDARD
+        logging.info(f"Set width of columns G:Z to {COL_WIDTH_STANDARD}")
         
         # Insert 3 rows at the top
         ws.insert_rows(1, 3)
@@ -281,21 +507,11 @@ def data_map_initial_setup(workbook: openpyxl.Workbook) -> None:
             cell.alignment = Alignment(wrap_text=True, vertical='top')
         
         logging.info("Applied text wrapping to column C and row 2")
-        
+
         # Format headers in row 2 with borders and pale blue background
-        pale_blue_fill = PatternFill(
-            start_color='E6F3FF',
-            end_color='E6F3FF',
-            fill_type='solid'
-        )
-        
-        thin_border = Border(
-            left=Side(style='thin'),
-            right=Side(style='thin'),
-            top=Side(style='thin'),
-            bottom=Side(style='thin')
-        )
-        
+        pale_blue_fill = create_pale_blue_fill()
+        thin_border = create_thin_border()
+
         headers_formatted = 0
         for col in range(1, ws.max_column + 1):
             cell = ws.cell(row=2, column=col)
@@ -305,7 +521,7 @@ def data_map_initial_setup(workbook: openpyxl.Workbook) -> None:
                 # Preserve the wrap_text alignment that was set earlier
                 cell.alignment = Alignment(wrap_text=True, horizontal='center', vertical='center')
                 headers_formatted += 1
-        
+
         logging.info(f"Formatted {headers_formatted} column headers in row 2 with borders, pale blue background, and center alignment")
         
         # Auto-fit row height for row 2 to accommodate wrapped text
@@ -405,8 +621,7 @@ def data_map_initial_setup(workbook: openpyxl.Workbook) -> None:
         
         if target_last_row > 4:  # Only copy if there are rows to copy to
             # Copy formulas from G4:AG4 down to the target range (including G column)
-            from openpyxl.utils import range_boundaries
-            
+
             # Define the source range (G4:AG4) - including G column
             source_range = f"G4:AG4"
             # Define the target range (G5:AG{target_last_row}) - including G column
@@ -427,9 +642,8 @@ def data_map_initial_setup(workbook: openpyxl.Workbook) -> None:
                         # Manually adjust relative row references in the formula
                         formula = source_cell.value
                         row_offset = target_row - 4
-                        
+
                         # Replace relative row references (e.g., C4 -> C5, C6, etc.)
-                        import re
                         def replace_row_ref(match):
                             col_ref = match.group(1)
                             row_ref = int(match.group(2))
@@ -465,61 +679,50 @@ def column_question_map_initial_setup(workbook: openpyxl.Workbook) -> None:
     """
     try:
         logging.info("Starting column question map initial setup...")
-        
+
         # Get the column question map worksheet
-        if 'column question map' not in [ws.title for ws in workbook.worksheets]:
-            logging.warning("No 'column question map' tab found, skipping column question map setup")
+        if SHEET_COLUMN_QUESTION_MAP not in [ws.title for ws in workbook.worksheets]:
+            logging.warning(f"No '{SHEET_COLUMN_QUESTION_MAP}' tab found, skipping column question map setup")
             return
-            
-        ws = workbook['column question map']
-        
+
+        ws = workbook[SHEET_COLUMN_QUESTION_MAP]
+
         # Remove gridlines from the worksheet
         ws.sheet_view.showGridLines = False
         logging.info("Removed gridlines from column question map worksheet")
-        
+
         # Set column widths
-        ws.column_dimensions['A'].width = 3
-        ws.column_dimensions['B'].width = 3
-        ws.column_dimensions['C'].width = 20
-        ws.column_dimensions['D'].width = 20
-        ws.column_dimensions['E'].width = 20
-        ws.column_dimensions['F'].width = 20
-        ws.column_dimensions['G'].width = 20
-        ws.column_dimensions['H'].width = 20
-        logging.info("Set column widths: A:B=3, C:H=20")
-        
+        ws.column_dimensions['A'].width = COL_WIDTH_NARROW
+        ws.column_dimensions['B'].width = COL_WIDTH_NARROW
+        ws.column_dimensions['C'].width = COL_WIDTH_WIDE
+        ws.column_dimensions['D'].width = COL_WIDTH_WIDE
+        ws.column_dimensions['E'].width = COL_WIDTH_WIDE
+        ws.column_dimensions['F'].width = COL_WIDTH_WIDE
+        ws.column_dimensions['G'].width = COL_WIDTH_WIDE
+        ws.column_dimensions['H'].width = COL_WIDTH_WIDE
+        logging.info(f"Set column widths: A:B={COL_WIDTH_NARROW}, C:H={COL_WIDTH_WIDE}")
+
         # Add column headers in row 2, columns C through H
         headers = [
             "All question columns",
-            "System or Survey", 
+            "System or Survey",
             "Question markers",
             "Question Number",
             "Unique question markers",
             "Question Number Map"
         ]
-        
+
         for i, header in enumerate(headers):
             col = i + 3  # C=3, D=4, E=5, F=6, G=7, H=8
             ws.cell(row=2, column=col, value=header)
-        
+
         logging.info("Added column headers in row 2: C2:H2")
-        
+
         # Format headers in row 2 with borders and pale blue background
-        pale_blue_fill = PatternFill(
-            start_color='E6F3FF',
-            end_color='E6F3FF',
-            fill_type='solid'
-        )
-        
-        thin_border = Border(
-            left=Side(style='thin'),
-            right=Side(style='thin'),
-            top=Side(style='thin'),
-            bottom=Side(style='thin')
-        )
-        
+        pale_blue_fill = create_pale_blue_fill()
+        thin_border = create_thin_border()
         center_alignment = Alignment(horizontal='center', vertical='center')
-        
+
         headers_formatted = 0
         for col in range(1, ws.max_column + 1):
             cell = ws.cell(row=2, column=col)
@@ -528,12 +731,12 @@ def column_question_map_initial_setup(workbook: openpyxl.Workbook) -> None:
                 cell.fill = pale_blue_fill
                 cell.alignment = center_alignment
                 headers_formatted += 1
-        
+
         logging.info(f"Formatted {headers_formatted} column headers in row 2 with borders, pale blue background, and center alignment")
-        
+
         # Copy column headers from raw data tab and transpose to column B
-        if 'raw data' in [ws_temp.title for ws_temp in workbook.worksheets]:
-            raw_data_ws = workbook['raw data']
+        if SHEET_RAW_DATA in [ws_temp.title for ws_temp in workbook.worksheets]:
+            raw_data_ws = workbook[SHEET_RAW_DATA]
             
             # Find the last column with text in row 2 of raw data
             last_col_with_text = 1
@@ -592,9 +795,8 @@ def column_question_map_initial_setup(workbook: openpyxl.Workbook) -> None:
                         # Manually adjust relative row references in the formula
                         formula = source_cell.value
                         row_offset = row - 3
-                        
+
                         # Replace relative row references (e.g., C3 -> C4, C5, etc.)
-                        import re
                         def replace_row_ref(match):
                             col_ref = match.group(1)
                             row_ref = int(match.group(2))
@@ -682,40 +884,40 @@ def calculate_excel_formulas(file_path: str) -> None:
     """
     Opens Excel to calculate all formulas in the workbook before proceeding with question cutting.
     This ensures that all formulas (especially column G lookups) are properly evaluated.
-    
+
     Args:
         file_path (str): Path to the Excel file to calculate
     """
+    if not WIN32_AVAILABLE:
+        logging.warning("win32com.client not available - skipping Excel calculation. Install pywin32 for full functionality.")
+        return
+
     try:
-        import win32com.client
         logging.info("Opening Excel to calculate all formulas...")
-        
+
         # Create Excel application
         excel_app = win32com.client.Dispatch("Excel.Application")
         excel_app.Visible = False  # Keep Excel hidden
         excel_app.DisplayAlerts = False  # Disable alerts
-        
+
         # Convert to absolute path for Excel
-        import os
         abs_file_path = os.path.abspath(file_path)
         logging.info(f"Opening Excel file: {abs_file_path}")
-        
+
         # Open the workbook
         workbook = excel_app.Workbooks.Open(abs_file_path)
-        
+
         # Calculate all formulas
         excel_app.Calculate()
         logging.info("Calculated all formulas in Excel")
-        
+
         # Save and close
         workbook.Save()
         workbook.Close()
         excel_app.Quit()
-        
+
         logging.info("Excel calculation completed successfully")
-        
-    except ImportError:
-        logging.warning("win32com.client not available - skipping Excel calculation. Install pywin32 for full functionality.")
+
     except Exception as e:
         logging.error(f"Error during Excel calculation: {e}")
         # Don't raise the error - continue with processing even if Excel calculation fails
@@ -751,13 +953,13 @@ def create_question_tabs(workbook: openpyxl.Workbook) -> None:
     """
     try:
         logging.info("Creating Q1-Q10 tabs...")
-        
+
         # Get the data map worksheet for column H lookups
-        if 'data map' not in [ws.title for ws in workbook.worksheets]:
-            logging.warning("No 'data map' tab found, creating tabs without column H data")
+        if SHEET_DATA_MAP not in [ws.title for ws in workbook.worksheets]:
+            logging.warning(f"No '{SHEET_DATA_MAP}' tab found, creating tabs without column H data")
             data_map_ws = None
         else:
-            data_map_ws = workbook['data map']
+            data_map_ws = workbook[SHEET_DATA_MAP]
         
         # Create Q1 through Q10 tabs
         for i in range(1, 11):  # 1 to 10 inclusive
@@ -871,89 +1073,30 @@ def cut_single_select_with_other(question_ws: openpyxl.worksheet.worksheet.Works
     """
     try:
         logging.info(f"Setting up single select with other for question {question_number}")
-        
-        # Apply basic formatting - ensure first 2 columns are blank with width 3 and remove gridlines
-        question_ws.column_dimensions['A'].width = 3
-        question_ws.column_dimensions['B'].width = 3
-        question_ws.sheet_view.showGridLines = False
-        
-        # Set column widths as specified
-        question_ws.column_dimensions['C'].width = 20
-        question_ws.column_dimensions['D'].width = 16
-        question_ws.column_dimensions['E'].width = 16
-        question_ws.column_dimensions['F'].width = 3
-        question_ws.column_dimensions['G'].width = 16
-        question_ws.column_dimensions['H'].width = 3
-        question_ws.column_dimensions['I'].width = 16
-        question_ws.column_dimensions['J'].width = 16
-        question_ws.column_dimensions['K'].width = 16
-        question_ws.column_dimensions['L'].width = 16
-        question_ws.column_dimensions['M'].width = 16
-        question_ws.column_dimensions['N'].width = 16
-        question_ws.column_dimensions['O'].width = 3
-        question_ws.column_dimensions['P'].width = 3
-        question_ws.column_dimensions['Q'].width = 13
-        
+
+        # Apply basic formatting with column widths
+        setup_question_basic_formatting(question_ws, include_other=True)
+
         # Place lowercase x in cells B2 and P2
         question_ws['B2'] = 'x'
         question_ws['P2'] = 'x'
-        
-        # Find and place question text from data map column C
-        if workbook and 'data map' in [ws.title for ws in workbook.worksheets]:
-            data_map_ws = workbook['data map']
-            question_text = find_question_text_from_data_map(data_map_ws, question_number)
-            if question_text:
-                question_ws['C2'] = question_text
-                # Make C2 bold
-                question_ws['C2'].font = openpyxl.styles.Font(bold=True)
-                logging.info(f"Added question text to C2: {question_text[:50]}...")
-            else:
-                question_ws['C2'] = f"Question {question_number} text not found"
-                question_ws['C2'].font = openpyxl.styles.Font(bold=True)
-                logging.warning(f"Question text not found for question {question_number}")
-                
-            # Find and place column L text from data map in G4
-            column_l_text = find_column_l_text_from_data_map(data_map_ws, question_number)
-            if column_l_text:
-                question_ws['G4'] = column_l_text
-                logging.info(f"Added column L text to G4: {column_l_text}")
-            else:
-                question_ws['G4'] = f"Column L text not found for question {question_number}"
-                logging.warning(f"Column L text not found for question {question_number}")
-                
-        else:
-            question_ws['C2'] = f"Question {question_number} - data map not available"
-            question_ws['C2'].font = openpyxl.styles.Font(bold=True)
-            question_ws['G4'] = "Data map not available"
-            logging.warning("Data map not available for question text lookup")
-        
+
+        # Add question text and section header
+        add_question_text_and_section_header(question_ws, question_number, workbook)
+
         # Add headers to row 4
-        question_ws['C4'] = 'Response Text'
-        question_ws['D4'] = 'N'
-        question_ws['E4'] = '%'
-        question_ws['I4'] = 'Filter Column #1'
-        question_ws['J4'] = 'Filter #1'
-        question_ws['K4'] = 'Filter Column #2'
-        question_ws['L4'] = 'Filter #2'
-        question_ws['M4'] = 'Filter Column #3'
-        question_ws['N4'] = 'Filter #3'
-        
-        # Add thin bottom borders to header cells
-        thin_bottom_border = openpyxl.styles.Border(bottom=openpyxl.styles.Side(style='thin'))
-        header_cells = ['C4', 'D4', 'E4', 'G4', 'I4', 'J4', 'K4', 'L4', 'M4', 'N4', 'Q4']
-        for cell_ref in header_cells:
-            question_ws[cell_ref].border = thin_bottom_border
-        
+        add_row4_headers(question_ws, include_q_header=True)
+
         # Extract and place response options
-        if workbook and 'data map' in [ws.title for ws in workbook.worksheets]:
-            data_map_ws = workbook['data map']
+        if workbook and SHEET_DATA_MAP in [ws.title for ws in workbook.worksheets]:
+            data_map_ws = workbook[SHEET_DATA_MAP]
             extract_response_options(data_map_ws, question_ws, question_number)
             
             # Find and place "Other Specify Child" question text in Q2
             other_child_text = find_other_specify_child_text(data_map_ws, question_number)
             if other_child_text:
                 question_ws['Q2'] = other_child_text
-                question_ws['Q2'].font = openpyxl.styles.Font(bold=True)
+                question_ws['Q2'].font = Font(bold=True)
                 logging.info(f"Added Other Specify Child text to Q2: {other_child_text[:50]}...")
                 
                 # Extract bracketed text from Q2 and place in Q4
@@ -972,37 +1115,10 @@ def cut_single_select_with_other(question_ws: openpyxl.worksheet.worksheet.Works
                 logging.warning(f"No Other Specify Child text found for question {question_number}")
         
         # Apply center alignment to specified columns
-        center_alignment = openpyxl.styles.Alignment(horizontal='center')
-        center_columns = ['D', 'E', 'G', 'I', 'J', 'K', 'L', 'M', 'N']
+        apply_center_alignment_to_columns(question_ws, include_q_column=False)
 
-        for col_letter in center_columns:
-            for row in question_ws.iter_rows(min_col=openpyxl.utils.column_index_from_string(col_letter),
-                                           max_col=openpyxl.utils.column_index_from_string(col_letter)):
-                for cell in row:
-                    cell.alignment = center_alignment
-
-        logging.info(f"Applied center alignment to columns D:E, G, I:N")
-
-        # Add additional analysis section
-        # Find the last row with text in column C (should contain "<>")
-        last_row_with_text = 6  # Start from row 6 where response options begin
-        for row in range(6, question_ws.max_row + 1):
-            cell_value = question_ws.cell(row=row, column=3).value  # Column C = 3
-            if cell_value is not None and str(cell_value).strip():
-                last_row_with_text = row
-
-        # Place lowercase "x" in column B, two rows below the last row with text
-        new_section_row = last_row_with_text + 2
-        question_ws.cell(row=new_section_row, column=2, value='x')  # Column B = 2
-        question_ws.cell(row=new_section_row, column=3, value='Cross Cut')  # Column C = 3
-
-        # Add bottom border to cells C through N in the new section row
-        thin_bottom_border = openpyxl.styles.Border(bottom=openpyxl.styles.Side(style='thin'))
-        for col in range(3, 15):  # Column C = 3, Column N = 14, so range(3, 15) covers C:N
-            question_ws.cell(row=new_section_row, column=col).border = thin_bottom_border
-
-        logging.info(f"Added 'x' marker in B{new_section_row} and 'Cross Cut' text in C{new_section_row} for additional analysis section")
-        logging.info(f"Applied bottom border to cells C{new_section_row}:N{new_section_row}")
+        # Add additional analysis section (Cross Cut)
+        new_section_row = add_cross_cut_section(question_ws)
 
         # Add filter labels starting two rows below "Cross Cut"
         filter_start_row = new_section_row + 2
@@ -1079,7 +1195,6 @@ def cut_single_select_with_other(question_ws: openpyxl.worksheet.worksheet.Works
                 for col_num in range(5, 15):  # E=5 through N=14
                     if source_value and isinstance(source_value, str) and source_value.startswith('='):
                         # This is a formula - adjust column references
-                        import re
                         adjusted_formula = source_value
 
                         # Calculate column offset (E is +1 from D, F is +2, etc.)
@@ -1094,7 +1209,6 @@ def cut_single_select_with_other(question_ws: openpyxl.worksheet.worksheet.Works
                             row_ref = match.group(3)
 
                             # Convert column letter to number, add offset, convert back
-                            from openpyxl.utils import column_index_from_string, get_column_letter
                             col_num_orig = column_index_from_string(col_letter)
                             new_col_num = col_num_orig + col_offset
                             new_col_letter = get_column_letter(new_col_num)
@@ -1154,112 +1268,29 @@ def cut_single_select(question_ws: openpyxl.worksheet.worksheet.Worksheet, quest
     """
     try:
         logging.info(f"Setting up single select for question {question_number}")
-        
-        # Apply basic formatting - ensure first 2 columns are blank with width 3 and remove gridlines
-        question_ws.column_dimensions['A'].width = 3
-        question_ws.column_dimensions['B'].width = 3
-        question_ws.sheet_view.showGridLines = False
-        
-        # Set column widths as specified (excluding O, P, Q)
-        question_ws.column_dimensions['C'].width = 20
-        question_ws.column_dimensions['D'].width = 13
-        question_ws.column_dimensions['E'].width = 13
-        question_ws.column_dimensions['F'].width = 3
-        question_ws.column_dimensions['G'].width = 13
-        question_ws.column_dimensions['H'].width = 3
-        question_ws.column_dimensions['I'].width = 13
-        question_ws.column_dimensions['J'].width = 13
-        question_ws.column_dimensions['K'].width = 13
-        question_ws.column_dimensions['L'].width = 13
-        question_ws.column_dimensions['M'].width = 13
-        question_ws.column_dimensions['N'].width = 13
-        
+
+        # Apply basic formatting with column widths
+        setup_question_basic_formatting(question_ws, include_other=False)
+
         # Place lowercase x in cell B2 only (no P2 for single select)
         question_ws['B2'] = 'x'
-        
-        # Find and place question text from data map column C
-        if workbook and 'data map' in [ws.title for ws in workbook.worksheets]:
-            data_map_ws = workbook['data map']
-            question_text = find_question_text_from_data_map(data_map_ws, question_number)
-            if question_text:
-                question_ws['C2'] = question_text
-                # Make C2 bold
-                question_ws['C2'].font = openpyxl.styles.Font(bold=True)
-                logging.info(f"Added question text to C2: {question_text[:50]}...")
-            else:
-                question_ws['C2'] = f"Question {question_number} text not found"
-                question_ws['C2'].font = openpyxl.styles.Font(bold=True)
-                logging.warning(f"Question text not found for question {question_number}")
-                
-            # Find and place column L text from data map in G4
-            column_l_text = find_column_l_text_from_data_map(data_map_ws, question_number)
-            if column_l_text:
-                question_ws['G4'] = column_l_text
-                logging.info(f"Added column L text to G4: {column_l_text}")
-            else:
-                question_ws['G4'] = f"Column L text not found for question {question_number}"
-                logging.warning(f"Column L text not found for question {question_number}")
-                
-        else:
-            question_ws['C2'] = f"Question {question_number} - data map not available"
-            question_ws['C2'].font = openpyxl.styles.Font(bold=True)
-            question_ws['G4'] = "Data map not available"
-            logging.warning("Data map not available for question text lookup")
-        
+
+        # Add question text and section header
+        add_question_text_and_section_header(question_ws, question_number, workbook)
+
         # Add headers to row 4 (excluding Q4)
-        question_ws['C4'] = 'Response Text'
-        question_ws['D4'] = 'N'
-        question_ws['E4'] = '%'
-        question_ws['I4'] = 'Filter Column #1'
-        question_ws['J4'] = 'Filter #1'
-        question_ws['K4'] = 'Filter Column #2'
-        question_ws['L4'] = 'Filter #2'
-        question_ws['M4'] = 'Filter Column #3'
-        question_ws['N4'] = 'Filter #3'
-        
-        # Add thin bottom borders to header cells (excluding Q4)
-        thin_bottom_border = openpyxl.styles.Border(bottom=openpyxl.styles.Side(style='thin'))
-        header_cells = ['C4', 'D4', 'E4', 'G4', 'I4', 'J4', 'K4', 'L4', 'M4', 'N4']
-        for cell_ref in header_cells:
-            question_ws[cell_ref].border = thin_bottom_border
-        
+        add_row4_headers(question_ws, include_q_header=False)
+
         # Extract and place response options (no Other Specify Child functionality)
-        if workbook and 'data map' in [ws.title for ws in workbook.worksheets]:
-            data_map_ws = workbook['data map']
+        if workbook and SHEET_DATA_MAP in [ws.title for ws in workbook.worksheets]:
+            data_map_ws = workbook[SHEET_DATA_MAP]
             extract_response_options(data_map_ws, question_ws, question_number)
-        
+
         # Apply center alignment to specified columns (excluding Q)
-        center_alignment = openpyxl.styles.Alignment(horizontal='center')
-        center_columns = ['D', 'E', 'G', 'I', 'J', 'K', 'L', 'M', 'N']
-
-        for col_letter in center_columns:
-            for row in question_ws.iter_rows(min_col=openpyxl.utils.column_index_from_string(col_letter),
-                                           max_col=openpyxl.utils.column_index_from_string(col_letter)):
-                for cell in row:
-                    cell.alignment = center_alignment
-
-        logging.info(f"Applied center alignment to columns D:E, G, I:N")
+        apply_center_alignment_to_columns(question_ws, include_q_column=False)
 
         # Add additional analysis section (Cross Cut)
-        # Find the last row with text in column C (should contain "<>")
-        last_row_with_text = 6  # Start from row 6 where response options begin
-        for row in range(6, question_ws.max_row + 1):
-            cell_value = question_ws.cell(row=row, column=3).value  # Column C = 3
-            if cell_value is not None and str(cell_value).strip():
-                last_row_with_text = row
-
-        # Place lowercase "x" in column B, two rows below the last row with text
-        new_section_row = last_row_with_text + 2
-        question_ws.cell(row=new_section_row, column=2, value='x')  # Column B = 2
-        question_ws.cell(row=new_section_row, column=3, value='Cross Cut')  # Column C = 3
-
-        # Add bottom border to cells C through N in the new section row
-        thin_bottom_border = openpyxl.styles.Border(bottom=openpyxl.styles.Side(style='thin'))
-        for col in range(3, 15):  # Column C = 3, Column N = 14, so range(3, 15) covers C:N
-            question_ws.cell(row=new_section_row, column=col).border = thin_bottom_border
-
-        logging.info(f"Added 'x' marker in B{new_section_row} and 'Cross Cut' text in C{new_section_row} for additional analysis section")
-        logging.info(f"Applied bottom border to cells C{new_section_row}:N{new_section_row}")
+        new_section_row = add_cross_cut_section(question_ws)
 
         # Add filter labels starting two rows below "Cross Cut"
         filter_start_row = new_section_row + 2
@@ -1336,7 +1367,6 @@ def cut_single_select(question_ws: openpyxl.worksheet.worksheet.Worksheet, quest
                 for col_num in range(5, 15):  # E=5 through N=14
                     if source_value and isinstance(source_value, str) and source_value.startswith('='):
                         # This is a formula - adjust column references
-                        import re
                         adjusted_formula = source_value
 
                         # Calculate column offset (E is +1 from D, F is +2, etc.)
@@ -1351,7 +1381,6 @@ def cut_single_select(question_ws: openpyxl.worksheet.worksheet.Worksheet, quest
                             row_ref = match.group(3)
 
                             # Convert column letter to number, add offset, convert back
-                            from openpyxl.utils import column_index_from_string, get_column_letter
                             col_num_orig = column_index_from_string(col_letter)
                             new_col_num = col_num_orig + col_offset
                             new_col_letter = get_column_letter(new_col_num)
@@ -1664,7 +1693,6 @@ def extract_bracketed_text(text: str) -> str:
         str: The text inside the first brackets, or None if no brackets found
     """
     try:
-        import re
         # Find the first occurrence of text within square brackets
         match = re.search(r'\[([^\]]+)\]', text)
         if match:
@@ -1790,8 +1818,6 @@ def main():
     """
     Main entry point for the survey processor v4.
     """
-    import argparse
-    
     logging.basicConfig(
         level=logging.INFO, 
         format='%(asctime)s - %(levelname)s - %(message)s'
