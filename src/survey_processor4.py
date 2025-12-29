@@ -1184,7 +1184,7 @@ def cut_single_select_with_other(question_ws: openpyxl.worksheet.worksheet.Works
                 question_ws.cell(row=current_formula_row, column=3, value=f'=C{reference_row}')
 
                 # Drag down COUNTIFS formula in column D, adjusting $G6 reference
-                countifs_formula_dragged = f"=COUNTIFS(OFFSET('raw data'!$C$3:$C$502, 0, MATCH($G$4, 'raw data'!$C$2:$AJC$2, 0)-1), $G{reference_row}, OFFSET('raw data'!$C$3:$C$502, 0, MATCH(D$16, 'raw data'!$C$2:$AJC$2, 0)-1), D$17, OFFSET('raw data'!$C$3:$C$502, 0, MATCH(D$18, 'raw data'!$C$2:$AJC$2, 0)-1), D$19)"
+                countifs_formula_dragged = f"=COUNTIFS(OFFSET('raw data'!$C$3:$C$502, 0, MATCH($G$4, 'raw data'!$C$2:$AJC$2, 0)-1), $G{reference_row}, OFFSET('raw data'!$C$3:$C$502, 0, MATCH(D${filter_col_1_row}, 'raw data'!$C$2:$AJC$2, 0)-1), D${filter_1_row}, OFFSET('raw data'!$C$3:$C$502, 0, MATCH(D${filter_col_2_row}, 'raw data'!$C$2:$AJC$2, 0)-1), D${filter_2_row})"
                 question_ws.cell(row=current_formula_row, column=4, value=countifs_formula_dragged)
 
             logging.info(f"Dragged down formulas from row {formula_row} to {formula_row + response_option_count - 1} ({response_option_count} rows)")
