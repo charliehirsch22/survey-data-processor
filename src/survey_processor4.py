@@ -907,8 +907,13 @@ def calculate_excel_formulas(file_path: str) -> None:
         # Open the workbook
         workbook = excel_app.Workbooks.Open(abs_file_path)
 
-        # Calculate all formulas
-        excel_app.Calculate()
+        # Calculate all formulas with full rebuild
+        excel_app.CalculateFullRebuild()
+        logging.info("Triggered full formula calculation in Excel")
+
+        # Wait for calculation to complete
+        import time
+        time.sleep(3)  # Give Excel time to complete all calculations
         logging.info("Calculated all formulas in Excel")
 
         # Save and close
