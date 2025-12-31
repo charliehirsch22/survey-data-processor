@@ -1161,12 +1161,12 @@ def cut_single_select_with_other(question_ws: openpyxl.worksheet.worksheet.Works
         filter_2_row = cross_cut_row + 5  # Row with "Filter #2"
 
         # First header row - Filter #1
-        first_header_formula = f"=OFFSET('data map'!$E$2, MATCH(D${filter_col_1_row}, 'data map'!$L$2:$L$3200, 0)+D${filter_1_row},0)"
+        first_header_formula = f'=IF(D${filter_1_row}="<>", "No filter", OFFSET(\'data map\'!$E$2, MATCH(D${filter_col_1_row}, \'data map\'!$L$2:$L$3200, 0)+D${filter_1_row},0))'
         question_ws.cell(row=first_header_row, column=4, value=first_header_formula)  # Column D = 4
         logging.info(f"Added first OFFSET formula in D{first_header_row} with flexible row references (D${filter_col_1_row} and D${filter_1_row})")
 
         # Second header row - Filter #2
-        second_header_formula = f"=OFFSET('data map'!$E$2, MATCH(D${filter_col_2_row}, 'data map'!$L$2:$L$3200, 0)+D${filter_2_row},0)"
+        second_header_formula = f'=IF(D${filter_2_row}="<>", "No filter", OFFSET(\'data map\'!$E$2, MATCH(D${filter_col_2_row}, \'data map\'!$L$2:$L$3200, 0)+D${filter_2_row},0))'
         question_ws.cell(row=second_header_row, column=4, value=second_header_formula)  # Column D = 4
         logging.info(f"Added second OFFSET formula in D{second_header_row} with flexible row references (D${filter_col_2_row} and D${filter_2_row})")
 
@@ -1346,12 +1346,12 @@ def cut_single_select(question_ws: openpyxl.worksheet.worksheet.Worksheet, quest
         filter_2_row = cross_cut_row + 5  # Row with "Filter #2"
 
         # First header row - Filter #1
-        first_header_formula = f"=OFFSET('data map'!$E$2, MATCH(D${filter_col_1_row}, 'data map'!$L$2:$L$3200, 0)+D${filter_1_row},0)"
+        first_header_formula = f'=IF(D${filter_1_row}="<>", "No filter", OFFSET(\'data map\'!$E$2, MATCH(D${filter_col_1_row}, \'data map\'!$L$2:$L$3200, 0)+D${filter_1_row},0))'
         question_ws.cell(row=first_header_row, column=4, value=first_header_formula)  # Column D = 4
         logging.info(f"Added first OFFSET formula in D{first_header_row} with flexible row references (D${filter_col_1_row} and D${filter_1_row})")
 
         # Second header row - Filter #2
-        second_header_formula = f"=OFFSET('data map'!$E$2, MATCH(D${filter_col_2_row}, 'data map'!$L$2:$L$3200, 0)+D${filter_2_row},0)"
+        second_header_formula = f'=IF(D${filter_2_row}="<>", "No filter", OFFSET(\'data map\'!$E$2, MATCH(D${filter_col_2_row}, \'data map\'!$L$2:$L$3200, 0)+D${filter_2_row},0))'
         question_ws.cell(row=second_header_row, column=4, value=second_header_formula)  # Column D = 4
         logging.info(f"Added second OFFSET formula in D{second_header_row} with flexible row references (D${filter_col_2_row} and D${filter_2_row})")
 
