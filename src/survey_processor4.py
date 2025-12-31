@@ -22,6 +22,7 @@ import argparse
 import logging
 import os
 import re
+from copy import copy
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -1133,12 +1134,13 @@ def cut_single_select_with_other(question_ws: openpyxl.worksheet.worksheet.Works
         question_ws.cell(row=cross_cut_row + 5, column=3, value='Filter #2')
         logging.info(f"Added filter labels in column C from row {cross_cut_row + 2} to {cross_cut_row + 5}")
 
-        # Add filter values in column D
-        question_ws.cell(row=cross_cut_row + 2, column=4, value='record')  # Column D = 4
-        question_ws.cell(row=cross_cut_row + 3, column=4, value='<>')
-        question_ws.cell(row=cross_cut_row + 4, column=4, value='record')
-        question_ws.cell(row=cross_cut_row + 5, column=4, value='<>')
-        logging.info(f"Added filter values (record/<>) in column D from row {cross_cut_row + 2} to {cross_cut_row + 5}")
+        # Add filter values in column D with blue font
+        blue_font = Font(color="0000FF")
+        question_ws.cell(row=cross_cut_row + 2, column=4, value='record').font = blue_font  # Column D = 4
+        question_ws.cell(row=cross_cut_row + 3, column=4, value='<>').font = blue_font
+        question_ws.cell(row=cross_cut_row + 4, column=4, value='record').font = blue_font
+        question_ws.cell(row=cross_cut_row + 5, column=4, value='<>').font = blue_font
+        logging.info(f"Added filter values (record/<>) in column D from row {cross_cut_row + 2} to {cross_cut_row + 5} with blue font")
 
         # Add HumRead Filter labels in column C (same rows as OFFSET formulas in columns D-N)
         question_ws.cell(row=cross_cut_row + 7, column=3, value='HumRead Filter #1')
@@ -1237,10 +1239,18 @@ def cut_single_select_with_other(question_ws: openpyxl.worksheet.worksheet.Works
                         # Negative lookbehind (?<!\$) ensures no $ before the column letter
                         adjusted_formula = re.sub(r'(?<!\$)([A-Z]+)(\$)(\d+)', adjust_col_ref, adjusted_formula)
 
-                        question_ws.cell(row=row_num, column=col_num, value=adjusted_formula)
+                        target_cell = question_ws.cell(row=row_num, column=col_num)
+                        target_cell.value = adjusted_formula
+                        # Copy font from source cell
+                        if source_cell.font:
+                            target_cell.font = copy(source_cell.font)
                     else:
                         # Not a formula, just copy the value
-                        question_ws.cell(row=row_num, column=col_num, value=source_value)
+                        target_cell = question_ws.cell(row=row_num, column=col_num)
+                        target_cell.value = source_value
+                        # Copy font from source cell
+                        if source_cell.font:
+                            target_cell.font = copy(source_cell.font)
 
             logging.info(f"Dragged column D (including filter values and formulas) over to columns E:N from row {start_drag_row} to {end_drag_row} with adjusted column references")
 
@@ -1318,12 +1328,13 @@ def cut_single_select(question_ws: openpyxl.worksheet.worksheet.Worksheet, quest
         question_ws.cell(row=cross_cut_row + 5, column=3, value='Filter #2')
         logging.info(f"Added filter labels in column C from row {cross_cut_row + 2} to {cross_cut_row + 5}")
 
-        # Add filter values in column D
-        question_ws.cell(row=cross_cut_row + 2, column=4, value='record')  # Column D = 4
-        question_ws.cell(row=cross_cut_row + 3, column=4, value='<>')
-        question_ws.cell(row=cross_cut_row + 4, column=4, value='record')
-        question_ws.cell(row=cross_cut_row + 5, column=4, value='<>')
-        logging.info(f"Added filter values (record/<>) in column D from row {cross_cut_row + 2} to {cross_cut_row + 5}")
+        # Add filter values in column D with blue font
+        blue_font = Font(color="0000FF")
+        question_ws.cell(row=cross_cut_row + 2, column=4, value='record').font = blue_font  # Column D = 4
+        question_ws.cell(row=cross_cut_row + 3, column=4, value='<>').font = blue_font
+        question_ws.cell(row=cross_cut_row + 4, column=4, value='record').font = blue_font
+        question_ws.cell(row=cross_cut_row + 5, column=4, value='<>').font = blue_font
+        logging.info(f"Added filter values (record/<>) in column D from row {cross_cut_row + 2} to {cross_cut_row + 5} with blue font")
 
         # Add HumRead Filter labels in column C (same rows as OFFSET formulas in columns D-N)
         question_ws.cell(row=cross_cut_row + 7, column=3, value='HumRead Filter #1')
@@ -1422,10 +1433,18 @@ def cut_single_select(question_ws: openpyxl.worksheet.worksheet.Worksheet, quest
                         # Negative lookbehind (?<!\$) ensures no $ before the column letter
                         adjusted_formula = re.sub(r'(?<!\$)([A-Z]+)(\$)(\d+)', adjust_col_ref, adjusted_formula)
 
-                        question_ws.cell(row=row_num, column=col_num, value=adjusted_formula)
+                        target_cell = question_ws.cell(row=row_num, column=col_num)
+                        target_cell.value = adjusted_formula
+                        # Copy font from source cell
+                        if source_cell.font:
+                            target_cell.font = copy(source_cell.font)
                     else:
                         # Not a formula, just copy the value
-                        question_ws.cell(row=row_num, column=col_num, value=source_value)
+                        target_cell = question_ws.cell(row=row_num, column=col_num)
+                        target_cell.value = source_value
+                        # Copy font from source cell
+                        if source_cell.font:
+                            target_cell.font = copy(source_cell.font)
 
             logging.info(f"Dragged column D (including filter values and formulas) over to columns E:N from row {start_drag_row} to {end_drag_row} with adjusted column references")
 
