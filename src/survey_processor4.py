@@ -1618,13 +1618,14 @@ def extract_response_options(data_map_ws: openpyxl.worksheet.worksheet.Worksheet
             adjusted_formula = formula.replace('$G6', f'$G{formula_row}').replace('$I6', f'$I{formula_row}').replace('$J6', f'$J{formula_row}').replace('$K6', f'$K{formula_row}').replace('$L6', f'$L{formula_row}').replace('$M6', f'$M{formula_row}').replace('$N6', f'$N{formula_row}')
             question_ws.cell(row=formula_row, column=4, value=adjusted_formula)  # Column D = 4
         
-        # Step 6: Add "record" and "<>" pattern to columns I:N starting at row 6
+        # Step 6: Add "record" and "<>" pattern to columns I:N starting at row 6 with blue font
         pattern_values = ["record", "<>", "record", "<>", "record", "<>"]  # I, J, K, L, M, N
-        
+        blue_font = Font(color="0000FF")
+
         for row_num in range(6, current_row + 1):  # Include the "<>" row
             for col_index, value in enumerate(pattern_values):
                 col_num = 9 + col_index  # Column I = 9, J = 10, K = 11, L = 12, M = 13, N = 14
-                question_ws.cell(row=row_num, column=col_num, value=value)
+                question_ws.cell(row=row_num, column=col_num, value=value).font = blue_font
         
         # Step 7: Add percentage formula to column E starting at row 6
         # The denominator is the absolute reference to the cell in column D next to the "<>" in column C
@@ -1638,7 +1639,7 @@ def extract_response_options(data_map_ws: openpyxl.worksheet.worksheet.Worksheet
             cell.number_format = '0.0%'
         
         logging.info(f"Added COUNTIFS formula to column D from row 6 to {current_row}")
-        logging.info(f"Added record/<> pattern to columns I:N from row 6 to {current_row}")
+        logging.info(f"Added record/<> pattern to columns I:N from row 6 to {current_row} with blue font")
         logging.info(f"Added percentage formula to column E from row 6 to {current_row} with denominator $D${denominator_row}")
         logging.info(f"Successfully extracted {len(response_rows)} response options for question {question_number}")
         
