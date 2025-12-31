@@ -1123,37 +1123,42 @@ def cut_single_select_with_other(question_ws: openpyxl.worksheet.worksheet.Works
         apply_center_alignment_to_columns(question_ws, include_q_column=False)
 
         # Add additional analysis section (Cross Cut)
-        new_section_row = add_cross_cut_section(question_ws)
+        # Use cross_cut_row as the anchor for all Cross Cut section positioning
+        cross_cut_row = add_cross_cut_section(question_ws)
 
-        # Add filter labels starting two rows below "Cross Cut"
-        filter_start_row = new_section_row + 2
-        question_ws.cell(row=filter_start_row, column=3, value='Filter Column #1')  # Column C = 3
-        question_ws.cell(row=filter_start_row + 1, column=3, value='Filter #1')
-        question_ws.cell(row=filter_start_row + 2, column=3, value='Filter Column #2')
-        question_ws.cell(row=filter_start_row + 3, column=3, value='Filter #2')
-        logging.info(f"Added filter labels in column C from row {filter_start_row} to {filter_start_row + 3}")
+        # Add filter labels using offsets from cross_cut_row
+        question_ws.cell(row=cross_cut_row + 2, column=3, value='Filter Column #1')  # Column C = 3
+        question_ws.cell(row=cross_cut_row + 3, column=3, value='Filter #1')
+        question_ws.cell(row=cross_cut_row + 4, column=3, value='Filter Column #2')
+        question_ws.cell(row=cross_cut_row + 5, column=3, value='Filter #2')
+        logging.info(f"Added filter labels in column C from row {cross_cut_row + 2} to {cross_cut_row + 5}")
 
         # Add filter values in column D
-        question_ws.cell(row=filter_start_row, column=4, value='record')  # Column D = 4
-        question_ws.cell(row=filter_start_row + 1, column=4, value='<>')
-        question_ws.cell(row=filter_start_row + 2, column=4, value='record')
-        question_ws.cell(row=filter_start_row + 3, column=4, value='<>')
-        logging.info(f"Added filter values (record/<>) in column D from row {filter_start_row} to {filter_start_row + 3}")
+        question_ws.cell(row=cross_cut_row + 2, column=4, value='record')  # Column D = 4
+        question_ws.cell(row=cross_cut_row + 3, column=4, value='<>')
+        question_ws.cell(row=cross_cut_row + 4, column=4, value='record')
+        question_ws.cell(row=cross_cut_row + 5, column=4, value='<>')
+        logging.info(f"Added filter values (record/<>) in column D from row {cross_cut_row + 2} to {cross_cut_row + 5}")
 
-        # Add formula 4 rows below "Filter #2" in column C (3 blank rows + 2 header rows)
-        formula_row = filter_start_row + 3 + 4  # "Filter #2" is at filter_start_row + 3, then add 4 more rows
+        # Add HumRead Filter labels in column C (same rows as OFFSET formulas in columns D-N)
+        question_ws.cell(row=cross_cut_row + 7, column=3, value='HumRead Filter #1')
+        question_ws.cell(row=cross_cut_row + 8, column=3, value='HumRead Filter #2')
+        logging.info(f"Added HumRead Filter labels in column C at rows {cross_cut_row + 7} and {cross_cut_row + 8}")
+
+        # Add blank row after HumRead Filter #2, then start data rows
+        formula_row = cross_cut_row + 10  # Blank at +9, data starts at +10
         question_ws.cell(row=formula_row, column=3, value='=C6')  # Column C = 3
         logging.info(f"Added formula '=C6' in C{formula_row}")
 
         # Add OFFSET formulas for both header rows
-        first_header_row = formula_row - 2  # Two rows above formula_row
-        second_header_row = formula_row - 1  # One row above formula_row
+        first_header_row = formula_row - 3  # Three rows above formula_row (at cross_cut_row + 7)
+        second_header_row = formula_row - 2  # Two rows above formula_row (at cross_cut_row + 8)
 
-        # Use flexible row references based on where filter rows are located
-        filter_col_1_row = filter_start_row  # Row with "Filter Column #1"
-        filter_1_row = filter_start_row + 1  # Row with "Filter #1"
-        filter_col_2_row = filter_start_row + 2  # Row with "Filter Column #2"
-        filter_2_row = filter_start_row + 3  # Row with "Filter #2"
+        # Use flexible row references based on cross_cut_row offsets
+        filter_col_1_row = cross_cut_row + 2  # Row with "Filter Column #1"
+        filter_1_row = cross_cut_row + 3  # Row with "Filter #1"
+        filter_col_2_row = cross_cut_row + 4  # Row with "Filter Column #2"
+        filter_2_row = cross_cut_row + 5  # Row with "Filter #2"
 
         # First header row - Filter #1
         first_header_formula = f"=OFFSET('data map'!$E$2, MATCH(D${filter_col_1_row}, 'data map'!$L$2:$L$3200, 0)+D${filter_1_row},0)"
@@ -1197,7 +1202,7 @@ def cut_single_select_with_other(question_ws: openpyxl.worksheet.worksheet.Works
 
             # Drag column D over to columns E through N for the entire new section
             # This includes Filter Column #1 through Filter #2 rows, OFFSET formula row, and all COUNTIFS formula rows
-            start_drag_row = filter_start_row  # Start from "Filter Column #1" row
+            start_drag_row = cross_cut_row + 2  # Start from "Filter Column #1" row
             end_drag_row = formula_row + response_option_count - 1  # End at the last response option row
 
             for row_num in range(start_drag_row, end_drag_row + 1):
@@ -1303,37 +1308,42 @@ def cut_single_select(question_ws: openpyxl.worksheet.worksheet.Worksheet, quest
         apply_center_alignment_to_columns(question_ws, include_q_column=False)
 
         # Add additional analysis section (Cross Cut)
-        new_section_row = add_cross_cut_section(question_ws)
+        # Use cross_cut_row as the anchor for all Cross Cut section positioning
+        cross_cut_row = add_cross_cut_section(question_ws)
 
-        # Add filter labels starting two rows below "Cross Cut"
-        filter_start_row = new_section_row + 2
-        question_ws.cell(row=filter_start_row, column=3, value='Filter Column #1')  # Column C = 3
-        question_ws.cell(row=filter_start_row + 1, column=3, value='Filter #1')
-        question_ws.cell(row=filter_start_row + 2, column=3, value='Filter Column #2')
-        question_ws.cell(row=filter_start_row + 3, column=3, value='Filter #2')
-        logging.info(f"Added filter labels in column C from row {filter_start_row} to {filter_start_row + 3}")
+        # Add filter labels using offsets from cross_cut_row
+        question_ws.cell(row=cross_cut_row + 2, column=3, value='Filter Column #1')  # Column C = 3
+        question_ws.cell(row=cross_cut_row + 3, column=3, value='Filter #1')
+        question_ws.cell(row=cross_cut_row + 4, column=3, value='Filter Column #2')
+        question_ws.cell(row=cross_cut_row + 5, column=3, value='Filter #2')
+        logging.info(f"Added filter labels in column C from row {cross_cut_row + 2} to {cross_cut_row + 5}")
 
         # Add filter values in column D
-        question_ws.cell(row=filter_start_row, column=4, value='record')  # Column D = 4
-        question_ws.cell(row=filter_start_row + 1, column=4, value='<>')
-        question_ws.cell(row=filter_start_row + 2, column=4, value='record')
-        question_ws.cell(row=filter_start_row + 3, column=4, value='<>')
-        logging.info(f"Added filter values (record/<>) in column D from row {filter_start_row} to {filter_start_row + 3}")
+        question_ws.cell(row=cross_cut_row + 2, column=4, value='record')  # Column D = 4
+        question_ws.cell(row=cross_cut_row + 3, column=4, value='<>')
+        question_ws.cell(row=cross_cut_row + 4, column=4, value='record')
+        question_ws.cell(row=cross_cut_row + 5, column=4, value='<>')
+        logging.info(f"Added filter values (record/<>) in column D from row {cross_cut_row + 2} to {cross_cut_row + 5}")
 
-        # Add formula 4 rows below "Filter #2" in column C (3 blank rows + 2 header rows)
-        formula_row = filter_start_row + 3 + 4  # "Filter #2" is at filter_start_row + 3, then add 4 more rows
+        # Add HumRead Filter labels in column C (same rows as OFFSET formulas in columns D-N)
+        question_ws.cell(row=cross_cut_row + 7, column=3, value='HumRead Filter #1')
+        question_ws.cell(row=cross_cut_row + 8, column=3, value='HumRead Filter #2')
+        logging.info(f"Added HumRead Filter labels in column C at rows {cross_cut_row + 7} and {cross_cut_row + 8}")
+
+        # Add blank row after HumRead Filter #2, then start data rows
+        formula_row = cross_cut_row + 10  # Blank at +9, data starts at +10
         question_ws.cell(row=formula_row, column=3, value='=C6')  # Column C = 3
         logging.info(f"Added formula '=C6' in C{formula_row}")
 
         # Add OFFSET formulas for both header rows
-        first_header_row = formula_row - 2  # Two rows above formula_row
-        second_header_row = formula_row - 1  # One row above formula_row
+        first_header_row = formula_row - 3  # Three rows above formula_row (at cross_cut_row + 7)
+        second_header_row = formula_row - 2  # Two rows above formula_row (at cross_cut_row + 8)
 
-        # Use flexible row references based on where filter rows are located
-        filter_col_1_row = filter_start_row  # Row with "Filter Column #1"
-        filter_1_row = filter_start_row + 1  # Row with "Filter #1"
-        filter_col_2_row = filter_start_row + 2  # Row with "Filter Column #2"
-        filter_2_row = filter_start_row + 3  # Row with "Filter #2"
+        # Use flexible row references based on cross_cut_row offsets
+        filter_col_1_row = cross_cut_row + 2  # Row with "Filter Column #1"
+        filter_1_row = cross_cut_row + 3  # Row with "Filter #1"
+        filter_col_2_row = cross_cut_row + 4  # Row with "Filter Column #2"
+        filter_2_row = cross_cut_row + 5  # Row with "Filter #2"
 
         # First header row - Filter #1
         first_header_formula = f"=OFFSET('data map'!$E$2, MATCH(D${filter_col_1_row}, 'data map'!$L$2:$L$3200, 0)+D${filter_1_row},0)"
@@ -1377,7 +1387,7 @@ def cut_single_select(question_ws: openpyxl.worksheet.worksheet.Worksheet, quest
 
             # Drag column D over to columns E through N for the entire new section
             # This includes Filter Column #1 through Filter #2 rows, OFFSET formula row, and all COUNTIFS formula rows
-            start_drag_row = filter_start_row  # Start from "Filter Column #1" row
+            start_drag_row = cross_cut_row + 2  # Start from "Filter Column #1" row
             end_drag_row = formula_row + response_option_count - 1  # End at the last response option row
 
             for row_num in range(start_drag_row, end_drag_row + 1):

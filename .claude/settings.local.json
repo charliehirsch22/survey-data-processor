@@ -12,7 +12,9 @@
       "Bash(gh auth:*)",
       "Bash(git stash:*)",
       "Bash(git config:*)",
-      "Bash(dir:*)"
+      "Bash(dir:*)",
+      "Bash(tasklist:*)",
+      "Bash(powershell -Command \"Get-Process | Where-Object {$_ProcessName -eq ''EXCEL''}\")"
     ],
     "deny": [],
     "ask": []
