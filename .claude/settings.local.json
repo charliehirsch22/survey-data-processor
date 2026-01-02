@@ -14,7 +14,11 @@
       "Bash(git config:*)",
       "Bash(dir:*)",
       "Bash(tasklist:*)",
-      "Bash(powershell -Command \"Get-Process | Where-Object {$_ProcessName -eq ''EXCEL''}\")"
+      "Bash(powershell -Command \"Get-Process | Where-Object {$_ProcessName -eq ''EXCEL''}\")",
+      "Bash(git push:*)",
+      "Bash(tree:*)",
+      "Bash(findstr:*)",
+      "Bash(ls:*)"
     ],
     "deny": [],
     "ask": []
