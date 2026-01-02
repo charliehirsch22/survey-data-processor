@@ -1167,6 +1167,15 @@ def cut_single_select_with_other(question_ws: openpyxl.worksheet.worksheet.Works
         filter_col_2_row = cross_cut_row + 6  # Row with "Filter Column #2"
         filter_2_row = cross_cut_row + 7  # Row with "Filter #2"
 
+        # Add Filter Q formulas to lookup English question text from data map
+        filter_q_1_formula = f'=IF(D${filter_col_1_row}="record", "No filter", OFFSET(\'data map\'!$C$2, MATCH(D${filter_col_1_row}, \'data map\'!$L$2:$L$3200, 0)-1, 0))'
+        question_ws.cell(row=filter_q_1_row, column=4, value=filter_q_1_formula)  # Column D = 4
+        logging.info(f"Added Filter Q #1 OFFSET formula in D{filter_q_1_row} referencing D${filter_col_1_row}")
+
+        filter_q_2_formula = f'=IF(D${filter_col_2_row}="record", "No filter", OFFSET(\'data map\'!$C$2, MATCH(D${filter_col_2_row}, \'data map\'!$L$2:$L$3200, 0)-1, 0))'
+        question_ws.cell(row=filter_q_2_row, column=4, value=filter_q_2_formula)  # Column D = 4
+        logging.info(f"Added Filter Q #2 OFFSET formula in D{filter_q_2_row} referencing D${filter_col_2_row}")
+
         # First header row - Filter #1
         first_header_formula = f'=IF(D${filter_1_row}="<>", "No filter", OFFSET(\'data map\'!$E$2, MATCH(D${filter_col_1_row}, \'data map\'!$L$2:$L$3200, 0)+D${filter_1_row},0))'
         question_ws.cell(row=first_header_row, column=4, value=first_header_formula)  # Column D = 4
@@ -1365,6 +1374,15 @@ def cut_single_select(question_ws: openpyxl.worksheet.worksheet.Worksheet, quest
         filter_q_2_row = cross_cut_row + 5  # Row with "Filter Q #2"
         filter_col_2_row = cross_cut_row + 6  # Row with "Filter Column #2"
         filter_2_row = cross_cut_row + 7  # Row with "Filter #2"
+
+        # Add Filter Q formulas to lookup English question text from data map
+        filter_q_1_formula = f'=IF(D${filter_col_1_row}="record", "No filter", OFFSET(\'data map\'!$C$2, MATCH(D${filter_col_1_row}, \'data map\'!$L$2:$L$3200, 0)-1, 0))'
+        question_ws.cell(row=filter_q_1_row, column=4, value=filter_q_1_formula)  # Column D = 4
+        logging.info(f"Added Filter Q #1 OFFSET formula in D{filter_q_1_row} referencing D${filter_col_1_row}")
+
+        filter_q_2_formula = f'=IF(D${filter_col_2_row}="record", "No filter", OFFSET(\'data map\'!$C$2, MATCH(D${filter_col_2_row}, \'data map\'!$L$2:$L$3200, 0)-1, 0))'
+        question_ws.cell(row=filter_q_2_row, column=4, value=filter_q_2_formula)  # Column D = 4
+        logging.info(f"Added Filter Q #2 OFFSET formula in D{filter_q_2_row} referencing D${filter_col_2_row}")
 
         # First header row - Filter #1
         first_header_formula = f'=IF(D${filter_1_row}="<>", "No filter", OFFSET(\'data map\'!$E$2, MATCH(D${filter_col_1_row}, \'data map\'!$L$2:$L$3200, 0)+D${filter_1_row},0))'
