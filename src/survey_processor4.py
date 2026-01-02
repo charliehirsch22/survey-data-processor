@@ -1128,39 +1128,44 @@ def cut_single_select_with_other(question_ws: openpyxl.worksheet.worksheet.Works
         cross_cut_row = add_cross_cut_section(question_ws)
 
         # Add filter labels using offsets from cross_cut_row
-        question_ws.cell(row=cross_cut_row + 2, column=3, value='Filter Column #1')  # Column C = 3
-        question_ws.cell(row=cross_cut_row + 3, column=3, value='Filter #1')
-        question_ws.cell(row=cross_cut_row + 4, column=3, value='Filter Column #2')
-        question_ws.cell(row=cross_cut_row + 5, column=3, value='Filter #2')
-        logging.info(f"Added filter labels in column C from row {cross_cut_row + 2} to {cross_cut_row + 5}")
+        question_ws.cell(row=cross_cut_row + 2, column=3, value='Filter Q #1')  # Column C = 3
+        question_ws.cell(row=cross_cut_row + 3, column=3, value='Filter Column #1')
+        question_ws.cell(row=cross_cut_row + 4, column=3, value='Filter #1')
+        question_ws.cell(row=cross_cut_row + 5, column=3, value='Filter Q #2')
+        question_ws.cell(row=cross_cut_row + 6, column=3, value='Filter Column #2')
+        question_ws.cell(row=cross_cut_row + 7, column=3, value='Filter #2')
+        logging.info(f"Added filter labels in column C from row {cross_cut_row + 2} to {cross_cut_row + 7}")
 
         # Add filter values in column D with blue font
         blue_font = Font(color="0000FF")
-        question_ws.cell(row=cross_cut_row + 2, column=4, value='record').font = blue_font  # Column D = 4
-        question_ws.cell(row=cross_cut_row + 3, column=4, value='<>').font = blue_font
-        question_ws.cell(row=cross_cut_row + 4, column=4, value='record').font = blue_font
-        question_ws.cell(row=cross_cut_row + 5, column=4, value='<>').font = blue_font
-        logging.info(f"Added filter values (record/<>) in column D from row {cross_cut_row + 2} to {cross_cut_row + 5} with blue font")
+        # Row +2 and +5 left empty for Filter Q rows (formulas will be added later)
+        question_ws.cell(row=cross_cut_row + 3, column=4, value='record').font = blue_font  # Column D = 4
+        question_ws.cell(row=cross_cut_row + 4, column=4, value='<>').font = blue_font
+        question_ws.cell(row=cross_cut_row + 6, column=4, value='record').font = blue_font
+        question_ws.cell(row=cross_cut_row + 7, column=4, value='<>').font = blue_font
+        logging.info(f"Added filter values (record/<>) in column D at rows {cross_cut_row + 3}, {cross_cut_row + 4}, {cross_cut_row + 6}, {cross_cut_row + 7} with blue font")
 
         # Add HumRead Filter labels in column C (same rows as OFFSET formulas in columns D-N)
-        question_ws.cell(row=cross_cut_row + 7, column=3, value='HumRead Filter #1')
-        question_ws.cell(row=cross_cut_row + 8, column=3, value='HumRead Filter #2')
-        logging.info(f"Added HumRead Filter labels in column C at rows {cross_cut_row + 7} and {cross_cut_row + 8}")
+        question_ws.cell(row=cross_cut_row + 9, column=3, value='HumRead Filter #1')
+        question_ws.cell(row=cross_cut_row + 10, column=3, value='HumRead Filter #2')
+        logging.info(f"Added HumRead Filter labels in column C at rows {cross_cut_row + 9} and {cross_cut_row + 10}")
 
         # Add blank row after HumRead Filter #2, then start data rows
-        formula_row = cross_cut_row + 10  # Blank at +9, data starts at +10
+        formula_row = cross_cut_row + 12  # Blank at +11, data starts at +12
         question_ws.cell(row=formula_row, column=3, value='=C6')  # Column C = 3
         logging.info(f"Added formula '=C6' in C{formula_row}")
 
         # Add OFFSET formulas for both header rows
-        first_header_row = formula_row - 3  # Three rows above formula_row (at cross_cut_row + 7)
-        second_header_row = formula_row - 2  # Two rows above formula_row (at cross_cut_row + 8)
+        first_header_row = formula_row - 3  # Three rows above formula_row (at cross_cut_row + 9)
+        second_header_row = formula_row - 2  # Two rows above formula_row (at cross_cut_row + 10)
 
         # Use flexible row references based on cross_cut_row offsets
-        filter_col_1_row = cross_cut_row + 2  # Row with "Filter Column #1"
-        filter_1_row = cross_cut_row + 3  # Row with "Filter #1"
-        filter_col_2_row = cross_cut_row + 4  # Row with "Filter Column #2"
-        filter_2_row = cross_cut_row + 5  # Row with "Filter #2"
+        filter_q_1_row = cross_cut_row + 2  # Row with "Filter Q #1"
+        filter_col_1_row = cross_cut_row + 3  # Row with "Filter Column #1"
+        filter_1_row = cross_cut_row + 4  # Row with "Filter #1"
+        filter_q_2_row = cross_cut_row + 5  # Row with "Filter Q #2"
+        filter_col_2_row = cross_cut_row + 6  # Row with "Filter Column #2"
+        filter_2_row = cross_cut_row + 7  # Row with "Filter #2"
 
         # First header row - Filter #1
         first_header_formula = f'=IF(D${filter_1_row}="<>", "No filter", OFFSET(\'data map\'!$E$2, MATCH(D${filter_col_1_row}, \'data map\'!$L$2:$L$3200, 0)+D${filter_1_row},0))'
@@ -1322,39 +1327,44 @@ def cut_single_select(question_ws: openpyxl.worksheet.worksheet.Worksheet, quest
         cross_cut_row = add_cross_cut_section(question_ws)
 
         # Add filter labels using offsets from cross_cut_row
-        question_ws.cell(row=cross_cut_row + 2, column=3, value='Filter Column #1')  # Column C = 3
-        question_ws.cell(row=cross_cut_row + 3, column=3, value='Filter #1')
-        question_ws.cell(row=cross_cut_row + 4, column=3, value='Filter Column #2')
-        question_ws.cell(row=cross_cut_row + 5, column=3, value='Filter #2')
-        logging.info(f"Added filter labels in column C from row {cross_cut_row + 2} to {cross_cut_row + 5}")
+        question_ws.cell(row=cross_cut_row + 2, column=3, value='Filter Q #1')  # Column C = 3
+        question_ws.cell(row=cross_cut_row + 3, column=3, value='Filter Column #1')
+        question_ws.cell(row=cross_cut_row + 4, column=3, value='Filter #1')
+        question_ws.cell(row=cross_cut_row + 5, column=3, value='Filter Q #2')
+        question_ws.cell(row=cross_cut_row + 6, column=3, value='Filter Column #2')
+        question_ws.cell(row=cross_cut_row + 7, column=3, value='Filter #2')
+        logging.info(f"Added filter labels in column C from row {cross_cut_row + 2} to {cross_cut_row + 7}")
 
         # Add filter values in column D with blue font
         blue_font = Font(color="0000FF")
-        question_ws.cell(row=cross_cut_row + 2, column=4, value='record').font = blue_font  # Column D = 4
-        question_ws.cell(row=cross_cut_row + 3, column=4, value='<>').font = blue_font
-        question_ws.cell(row=cross_cut_row + 4, column=4, value='record').font = blue_font
-        question_ws.cell(row=cross_cut_row + 5, column=4, value='<>').font = blue_font
-        logging.info(f"Added filter values (record/<>) in column D from row {cross_cut_row + 2} to {cross_cut_row + 5} with blue font")
+        # Row +2 and +5 left empty for Filter Q rows (formulas will be added later)
+        question_ws.cell(row=cross_cut_row + 3, column=4, value='record').font = blue_font  # Column D = 4
+        question_ws.cell(row=cross_cut_row + 4, column=4, value='<>').font = blue_font
+        question_ws.cell(row=cross_cut_row + 6, column=4, value='record').font = blue_font
+        question_ws.cell(row=cross_cut_row + 7, column=4, value='<>').font = blue_font
+        logging.info(f"Added filter values (record/<>) in column D at rows {cross_cut_row + 3}, {cross_cut_row + 4}, {cross_cut_row + 6}, {cross_cut_row + 7} with blue font")
 
         # Add HumRead Filter labels in column C (same rows as OFFSET formulas in columns D-N)
-        question_ws.cell(row=cross_cut_row + 7, column=3, value='HumRead Filter #1')
-        question_ws.cell(row=cross_cut_row + 8, column=3, value='HumRead Filter #2')
-        logging.info(f"Added HumRead Filter labels in column C at rows {cross_cut_row + 7} and {cross_cut_row + 8}")
+        question_ws.cell(row=cross_cut_row + 9, column=3, value='HumRead Filter #1')
+        question_ws.cell(row=cross_cut_row + 10, column=3, value='HumRead Filter #2')
+        logging.info(f"Added HumRead Filter labels in column C at rows {cross_cut_row + 9} and {cross_cut_row + 10}")
 
         # Add blank row after HumRead Filter #2, then start data rows
-        formula_row = cross_cut_row + 10  # Blank at +9, data starts at +10
+        formula_row = cross_cut_row + 12  # Blank at +11, data starts at +12
         question_ws.cell(row=formula_row, column=3, value='=C6')  # Column C = 3
         logging.info(f"Added formula '=C6' in C{formula_row}")
 
         # Add OFFSET formulas for both header rows
-        first_header_row = formula_row - 3  # Three rows above formula_row (at cross_cut_row + 7)
-        second_header_row = formula_row - 2  # Two rows above formula_row (at cross_cut_row + 8)
+        first_header_row = formula_row - 3  # Three rows above formula_row (at cross_cut_row + 9)
+        second_header_row = formula_row - 2  # Two rows above formula_row (at cross_cut_row + 10)
 
         # Use flexible row references based on cross_cut_row offsets
-        filter_col_1_row = cross_cut_row + 2  # Row with "Filter Column #1"
-        filter_1_row = cross_cut_row + 3  # Row with "Filter #1"
-        filter_col_2_row = cross_cut_row + 4  # Row with "Filter Column #2"
-        filter_2_row = cross_cut_row + 5  # Row with "Filter #2"
+        filter_q_1_row = cross_cut_row + 2  # Row with "Filter Q #1"
+        filter_col_1_row = cross_cut_row + 3  # Row with "Filter Column #1"
+        filter_1_row = cross_cut_row + 4  # Row with "Filter #1"
+        filter_q_2_row = cross_cut_row + 5  # Row with "Filter Q #2"
+        filter_col_2_row = cross_cut_row + 6  # Row with "Filter Column #2"
+        filter_2_row = cross_cut_row + 7  # Row with "Filter #2"
 
         # First header row - Filter #1
         first_header_formula = f'=IF(D${filter_1_row}="<>", "No filter", OFFSET(\'data map\'!$E$2, MATCH(D${filter_col_1_row}, \'data map\'!$L$2:$L$3200, 0)+D${filter_1_row},0))'
